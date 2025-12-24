@@ -1,25 +1,10 @@
-/**
-=========================================================
-* Material Dashboard 2 React - v2.2.0
-=========================================================
-
-* Product Page: https://www.creative-tim.com/product/material-dashboard-react
-* Copyright 2023 Creative Tim (https://www.creative-tim.com)
-
-Coded by www.creative-tim.com
-
- =========================================================
-
-* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
-
 // Material Dashboard 2 React base styles
 import boxShadows from "assets/theme/base/boxShadows";
 import typography from "assets/theme/base/typography";
 import colors from "assets/theme/base/colors";
 import borders from "assets/theme/base/borders";
 
-// Material Dashboard 2 React helper functions
+// Helper functions
 import pxToRem from "assets/theme/functions/pxToRem";
 
 const { lg } = boxShadows;
@@ -34,9 +19,9 @@ const autocomplete = {
       padding: pxToRem(8),
       fontSize: size.sm,
       color: text.main,
-      textAlign: "left",
-      backgroundColor: `${white.main} !important`,
+      backgroundColor: white.main,
       borderRadius: borderRadius.md,
+      zIndex: 1300,
     },
 
     paper: {
@@ -45,20 +30,24 @@ const autocomplete = {
     },
 
     option: {
-      padding: `${pxToRem(4.8)} ${pxToRem(16)}`,
+      padding: `${pxToRem(6)} ${pxToRem(16)}`,
       borderRadius: borderRadius.md,
       fontSize: size.sm,
       color: text.main,
-      transition: "background-color 300ms ease, color 300ms ease",
+      transition: "background-color 200ms ease",
 
-      "&:hover, &:focus, &.Mui-selected, &.Mui-selected:hover, &.Mui-selected:focus": {
+      "&:hover": {
         backgroundColor: light.main,
         color: dark.main,
       },
 
-      '&[aria-selected="true"]': {
-        backgroundColor: `${light.main} !important`,
-        color: `${dark.main} !important`,
+      "&.Mui-selected": {
+        backgroundColor: light.main,
+        color: dark.main,
+      },
+
+      "&.Mui-selected:hover": {
+        backgroundColor: light.main,
       },
     },
 
@@ -69,6 +58,7 @@ const autocomplete = {
 
     groupLabel: {
       color: dark.main,
+      fontWeight: 600,
     },
 
     loading: {
@@ -77,21 +67,16 @@ const autocomplete = {
     },
 
     tag: {
-      display: "flex",
-      alignItems: "center",
-      height: "auto",
-      padding: pxToRem(4),
       backgroundColor: gradients.dark.state,
       color: white.main,
+      borderRadius: borderRadius.sm,
 
       "& .MuiChip-label": {
-        lineHeight: 1.2,
-        padding: `0 ${pxToRem(10)} 0 ${pxToRem(4)}`,
+        padding: `0 ${pxToRem(8)}`,
       },
 
-      "& .MuiSvgIcon-root, & .MuiSvgIcon-root:hover, & .MuiSvgIcon-root:focus": {
+      "& .MuiSvgIcon-root": {
         color: white.main,
-        marginRight: 0,
       },
     },
   },

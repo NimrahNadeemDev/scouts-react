@@ -29,17 +29,9 @@ import PageLayout from "examples/LayoutContainers/PageLayout";
 // Authentication pages components
 import Footer from "layouts/authentication/components/Footer";
 
-function BasicLayout({ image, children }) {
+function BasicLayout({ image, children, showFooter }) {
   return (
     <PageLayout>
-      <DefaultNavbar
-        action={{
-          type: "external",
-          route: "https://creative-tim.com/product/material-dashboard-react",
-          label: "free download",
-          color: "dark",
-        }}
-      />
       <MDBox
         position="absolute"
         width="100%"
@@ -63,7 +55,7 @@ function BasicLayout({ image, children }) {
           </Grid>
         </Grid>
       </MDBox>
-      <Footer light />
+      {showFooter && <Footer light />}
     </PageLayout>
   );
 }
@@ -72,6 +64,12 @@ function BasicLayout({ image, children }) {
 BasicLayout.propTypes = {
   image: PropTypes.string.isRequired,
   children: PropTypes.node.isRequired,
+  showFooter: PropTypes.bool,
+};
+
+// Setting default props for the BasicLayout
+BasicLayout.defaultProps = {
+  showFooter: true,
 };
 
 export default BasicLayout;

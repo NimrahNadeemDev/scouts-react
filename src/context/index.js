@@ -23,6 +23,10 @@ import { createContext, useContext, useReducer, useMemo } from "react";
 // prop-types is a library for typechecking of props
 import PropTypes from "prop-types";
 
+// Import SnackbarProvider
+import { SnackbarProvider } from "./SnackbarContext";
+import { AuthProvider } from "./AuthContext";
+
 // Material Dashboard 2 React main context
 const MaterialUI = createContext();
 
@@ -123,6 +127,8 @@ const setDarkMode = (dispatch, value) => dispatch({ type: "DARKMODE", value });
 export {
   MaterialUIControllerProvider,
   useMaterialUIController,
+  SnackbarProvider,
+  AuthProvider,
   setMiniSidenav,
   setTransparentSidenav,
   setWhiteSidenav,
