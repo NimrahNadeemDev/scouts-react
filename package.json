@@ -19,6 +19,9 @@
     "@mui/icons-material": "^5.18.0",
     "@mui/material": "^5.18.0",
     "@mui/system": "^5.18.0",
+    "@react-google-maps/api": "^2.20.8",
+    "@vis.gl/react-google-maps": "^1.7.1",
+    "autosuggest-highlight": "^3.3.4",
     "axios": "^1.13.2",
     "chart.js": "4.3.0",
     "chroma-js": "2.4.2",
@@ -41,7 +44,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-   "install:clean": "rd /s /q node_modules && del package-lock.json && npm install && npm start"
+    "install:clean": "rd /s /q node_modules && del package-lock.json && npm install && npm start"
   },
   "eslintConfig": {
     "extends": [
@@ -62,15 +65,24 @@
     ]
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
     "ajv": "^7.2.4",
-    "eslint": "8.39.0",
+    "eslint": "^8.39.0",
     "eslint-config-prettier": "8.8.0",
     "eslint-plugin-import": "2.27.5",
     "eslint-plugin-jsx-a11y": "6.7.1",
     "eslint-plugin-prettier": "4.2.1",
     "eslint-plugin-react": "7.32.2",
-    "eslint-plugin-react-hooks": "4.6.0",
-    "prettier": "2.8.8"
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "globals": "^16.5.0",
+    "prettier": "2.8.8",
+    "tailwindcss": "^4.1.18",
+    "vite": "^7.3.0"
   },
   "overrides": {
     "svgo": "3.0.2"

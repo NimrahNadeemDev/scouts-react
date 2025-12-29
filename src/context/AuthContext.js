@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import PropTypes from "prop-types";
-import { getAuthToken, getStoredUser, logoutUser } from "services/authService";
+
+import {
+  getAuthToken,
+  getUser,
+  clearAuthData,
+  isAuthenticated as checkAuth,
+} from "config/axiosConfig";
 
 const AuthContext = createContext();
 
@@ -12,24 +18,40 @@ export const AuthProvider = ({ children }) => {
   // Check if user is already logged in on app load
   useEffect(() => {
     const token = getAuthToken();
-    const storedUser = getStoredUser();
+    const storedUser = getUser();
 
     if (token && storedUser) {
       setUser(storedUser);
       setIsAuthenticated(true);
+    } else {
+      setIsAuthenticated(false);
     }
     setLoading(false);
   }, []);
 
-  const login = (userData) => {
+  const login = (userData, token) => {
     setUser(userData);
     setIsAuthenticated(true);
+
+    // Optionally store in localStorage if not already done
+    if (token) {
+      localStorage.setItem("authToken", token);
+    }
+    if (userData) {
+      localStorage.setItem("user", JSON.stringify(userData));
+    }
   };
 
   const logout = () => {
-    logoutUser();
+    clearAuthData(); // Clear all auth data
     setUser(null);
     setIsAuthenticated(false);
+  };
+
+  // Update user data (useful for profile updates)
+  const updateUser = (updatedUserData) => {
+    setUser(updatedUserData);
+    localStorage.setItem("user", JSON.stringify(updatedUserData));
   };
 
   return (
@@ -40,6 +62,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         login,
         logout,
+        updateUser, // Added updateUser function
       }}
     >
       {children}

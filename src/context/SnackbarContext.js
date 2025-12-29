@@ -10,7 +10,8 @@ export const SnackbarProvider = ({ children }) => {
     severity: "success",
   });
 
-  const showSnackbar = (message, severity = "success") => {
+  // Changed function name from showSnackbar to openSnackBar to match usage
+  const openSnackBar = (severity = "success", message) => {
     setSnackbar({ open: true, message, severity });
   };
 
@@ -19,7 +20,7 @@ export const SnackbarProvider = ({ children }) => {
   };
 
   return (
-    <SnackbarContext.Provider value={{ snackbar, showSnackbar, closeSnackbar }}>
+    <SnackbarContext.Provider value={{ snackbar, openSnackBar, closeSnackbar }}>
       {children}
     </SnackbarContext.Provider>
   );

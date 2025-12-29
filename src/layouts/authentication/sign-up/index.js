@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-// @mui material components
+// MUI components
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
 
@@ -14,11 +14,11 @@ import MDButton from "components/MDButton";
 // Layout
 import BasicLayout from "layouts/authentication/components/BasicLayout";
 
-// API
-import { registerUser } from "services/authService";
-
 // Image
 import bgImage from "assets/images/bg-sign-up-cover.jpeg";
+
+// Axios and auth helpers
+import axiosInstance, { setAuthData } from "config/axiosConfig";
 
 function Cover() {
   const navigate = useNavigate();
@@ -36,44 +36,157 @@ function Cover() {
     web_url: "",
   });
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState({});
+  const [apiMessage, setApiMessage] = useState("");
+  const [messageType, setMessageType] = useState(""); // "success" or "error"
   const [agree, setAgree] = useState(false);
+  const [loading, setLoading] = useState(false);
 
+  // Handle input changes
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+    setErrors({ ...errors, [e.target.name]: "" });
   };
 
-  const handleSignUp = async () => {
-    if (!agree) {
-      setError("You must agree to the terms and conditions");
-      return;
+  // Local validation
+  const validateFields = () => {
+    const newErrors = {};
+    const requiredFields = [
+      "name",
+      "email",
+      "password",
+      "password_confirmation",
+      "phone",
+      "address",
+      "city",
+      "state",
+      "postal_code",
+    ];
+
+    requiredFields.forEach((field) => {
+      if (!form[field]) newErrors[field] = "This field is required";
+    });
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (form.email && !emailRegex.test(form.email)) newErrors.email = "Invalid email address";
+
+    // Phone validation
+    const phoneRegex = /^\d{10,}$/;
+    if (form.phone && !phoneRegex.test(form.phone))
+      newErrors.phone = "Phone must be at least 10 digits";
+
+    // Password confirmation
+    if (
+      form.password &&
+      form.password_confirmation &&
+      form.password !== form.password_confirmation
+    ) {
+      newErrors.password_confirmation = "Passwords do not match";
     }
 
-    if (!form.email || !form.password || !form.name) {
-      setError("Name, email and password are required");
-      return;
-    }
+    // Terms checkbox
+    if (!agree) newErrors.agree = "You must agree to the terms and conditions";
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Sign-Up handler
+  const handleSignUp = async () => {
+    setApiMessage("");
+    setMessageType("");
+
+    if (!validateFields()) return;
 
     try {
       setLoading(true);
-      setError("");
 
-      await registerUser({
-        ...form,
-        password_confirmation: form.password,
-      });
+      // Make API call with Axios
+      const response = await axiosInstance.post("/customers/store-register", form);
 
-      navigate("/authentication/sign-in");
+      console.log("Registration response:", response.data);
+
+      // Check if registration was successful and customer ID is returned
+      const { user, access_token } = response.data;
+
+      if (!user) {
+        setApiMessage("Registration successful but user data not returned. Please sign in.");
+        setMessageType("success");
+        setTimeout(() => navigate("/authentication/sign-in"), 2500);
+        return;
+      }
+
+      // Extract customer ID - handle different possible field names
+      const customerId = user.id || user.customer_id || user.customerId;
+
+      if (!customerId) {
+        console.error("Customer ID not found in registration response:", user);
+        setApiMessage(
+          "Registration successful but customer ID not assigned. Please contact support."
+        );
+        setMessageType("error");
+        setLoading(false);
+        return;
+      }
+
+      console.log("Registration successful! Customer ID assigned:", customerId);
+
+      // Option 1: If backend returns access_token on registration, store auth data and redirect to dashboard
+      if (access_token) {
+        setAuthData(access_token, user);
+        setApiMessage(
+          `Registration successful! Your Customer ID is ${customerId}. Redirecting to dashboard...`
+        );
+        setMessageType("success");
+        setTimeout(() => navigate("/dashboard"), 2500);
+      }
+      // Option 2: If no token returned, just store customer ID and redirect to sign in
+      else {
+        localStorage.setItem("customerId", customerId.toString());
+        setApiMessage(
+          `Registration successful! Your Customer ID is ${customerId}. Redirecting to Sign-In...`
+        );
+        setMessageType("success");
+        setTimeout(() => navigate("/authentication/sign-in"), 2500);
+      }
     } catch (err) {
-      setError(err.message || "Registration failed");
-    } finally {
+      console.error("Registration error:", err);
+
+      // Better error handling
+      if (err.response) {
+        const errorMessage = err.response.data?.message || "Registration failed";
+        setApiMessage(errorMessage);
+      } else if (err.request) {
+        setApiMessage("Unable to reach server. Please check your internet connection.");
+      } else {
+        setApiMessage(err.message || "Registration failed. Please try again.");
+      }
+
+      setMessageType("error");
       setLoading(false);
     }
   };
 
+  const fields = [
+    { name: "name", label: "Name *" },
+    { name: "email", label: "Email *", type: "email" },
+    { name: "password", label: "Password *", type: "password" },
+    { name: "password_confirmation", label: "Confirm Password *", type: "password" },
+    { name: "phone", label: "Phone *" },
+    { name: "address", label: "Address *" },
+    { name: "city", label: "City *" },
+    { name: "state", label: "State *" },
+    { name: "postal_code", label: "Postal Code *" },
+    { name: "web_url", label: "Website URL" },
+  ];
+
   return (
-    <BasicLayout image={bgImage} showFooter={false}>
+    <BasicLayout
+      image={bgImage}
+      showFooter={false}
+      sx={{ overflowY: "auto", minHeight: "100vh", py: 6 }}
+    >
       <Card>
         <MDBox
           variant="gradient"
@@ -103,52 +216,29 @@ function Cover() {
               handleSignUp();
             }}
           >
-            {/* Name */}
-            <MDBox mb={2}>
-              <MDInput
-                name="name"
-                label="Name"
-                variant="standard"
-                fullWidth
-                value={form.name}
-                onChange={handleChange}
-              />
-            </MDBox>
-
-            <MDBox mb={2}>
-              <MDInput
-                name="email"
-                type="email"
-                label="Email"
-                variant="standard"
-                fullWidth
-                value={form.email}
-                onChange={handleChange}
-              />
-            </MDBox>
-
-            <MDBox mb={2}>
-              <MDInput
-                name="password"
-                type="password"
-                label="Password"
-                variant="standard"
-                fullWidth
-                value={form.password}
-                onChange={handleChange}
-              />
-            </MDBox>
-
-            {error && (
-              <MDBox mb={2}>
-                <MDTypography variant="caption" color="error">
-                  {error}
-                </MDTypography>
+            {fields.map((field) => (
+              <MDBox mb={2} key={field.name}>
+                <MDInput
+                  name={field.name}
+                  type={field.type || "text"}
+                  label={field.label}
+                  variant="standard"
+                  fullWidth
+                  value={form[field.name]}
+                  onChange={handleChange}
+                  disabled={loading}
+                />
+                {errors[field.name] && (
+                  <MDTypography variant="caption" color="error">
+                    {errors[field.name]}
+                  </MDTypography>
+                )}
               </MDBox>
-            )}
+            ))}
 
-            <MDBox display="flex" alignItems="center" ml={-1}>
-              <Checkbox checked={agree} onChange={() => setAgree(!agree)} />
+            {/* Terms */}
+            <MDBox display="flex" alignItems="center" ml={-1} mb={2}>
+              <Checkbox checked={agree} onChange={() => setAgree(!agree)} disabled={loading} />
               <MDTypography
                 variant="button"
                 fontWeight="regular"
@@ -168,20 +258,37 @@ function Cover() {
                 Terms and Conditions
               </MDTypography>
             </MDBox>
+            {errors.agree && (
+              <MDTypography variant="caption" color="error" mb={2}>
+                {errors.agree}
+              </MDTypography>
+            )}
 
-            <MDBox mt={4} mb={1}>
-              <MDButton
-                type="submit"
-                variant="gradient"
-                color="info"
-                fullWidth
-                onClick={handleSignUp}
-                disabled={loading}
+            {/* API message */}
+            {apiMessage && (
+              <MDBox
+                mb={2}
+                p={2}
+                bgcolor={messageType === "success" ? "success.light" : "error.light"}
+                borderRadius="md"
               >
+                <MDTypography
+                  variant="caption"
+                  color={messageType === "success" ? "success" : "error"}
+                  fontWeight="medium"
+                >
+                  {apiMessage}
+                </MDTypography>
+              </MDBox>
+            )}
+
+            <MDBox mt={2}>
+              <MDButton type="submit" variant="gradient" color="info" fullWidth disabled={loading}>
                 {loading ? "Creating account..." : "Sign up"}
               </MDButton>
             </MDBox>
 
+            {/* Sign In Link */}
             <MDBox mt={3} mb={1} textAlign="center">
               <MDTypography variant="button" color="text">
                 Already have an account?{" "}

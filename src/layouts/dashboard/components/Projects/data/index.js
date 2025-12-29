@@ -100,16 +100,21 @@ export default function data() {
           </MDBox>
         ),
         location: (
-          <MDTypography variant="caption" color="text">
+          <MDTypography
+            maxWidth="150px"
+            variant="caption"
+            color="text"
+            sx={{ wordBreak: "break-word" }}
+          >
             123 Industrial Park, Springfield, IL 62704
           </MDTypography>
         ),
         schedule: (
-          <MDBox>
-            <MDTypography variant="caption" fontWeight="medium">
+          <MDBox maxWidth="150px" sx={{ wordBreak: "break-word" }}>
+            <MDTypography variant="caption" fontWeight="medium" color="text">
               Start: Nov 21, 2025 · 03:00 AM
             </MDTypography>
-            <MDTypography variant="caption" color="text">
+            <MDTypography variant="caption" fontWeight="medium" color="text">
               End: Nov 21, 2025 · 11:00 AM
             </MDTypography>
           </MDBox>
@@ -152,11 +157,11 @@ export default function data() {
           </MDTypography>
         ),
         schedule: (
-          <MDBox>
-            <MDTypography variant="caption" fontWeight="medium">
+          <MDBox maxWidth="150px" sx={{ wordBreak: "break-word" }}>
+            <MDTypography variant="caption" fontWeight="medium" color="text">
               Start: Nov 19, 2025 · 02:43 PM
             </MDTypography>
-            <MDTypography variant="caption" color="text">
+            <MDTypography variant="caption" fontWeight="medium" color="text">
               End: Nov 19, 2025 · 10:43 PM
             </MDTypography>
           </MDBox>
@@ -199,11 +204,11 @@ export default function data() {
           </MDTypography>
         ),
         schedule: (
-          <MDBox>
-            <MDTypography variant="caption" fontWeight="medium">
+          <MDBox maxWidth="150px" sx={{ wordBreak: "break-word" }}>
+            <MDTypography variant="caption" fontWeight="medium" color="text">
               Start: Nov 19, 2025 · 02:30 PM
             </MDTypography>
-            <MDTypography variant="caption" color="text">
+            <MDTypography variant="caption" fontWeight="medium" color="text">
               End: Nov 19, 2025 · 10:30 PM
             </MDTypography>
           </MDBox>

@@ -1,203 +1,362 @@
-/**
-=========================================================
-* Material Dashboard 2 React - v2.2.0
-=========================================================
+import React, { useState, useEffect } from "react";
 
-* Product Page: https://www.creative-tim.com/product/material-dashboard-react
-* Copyright 2023 Creative Tim (https://www.creative-tim.com)
+// MUI
+import {
+  Box,
+  Card,
+  Grid,
+  TextField,
+  Typography,
+  Button,
+  IconButton,
+  InputAdornment,
+  Alert,
+  CircularProgress,
+} from "@mui/material";
 
-Coded by www.creative-tim.com
+// Icons
+import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 
- =========================================================
+// Axios and auth helpers
+import axiosInstance from "config/axiosConfig";
+import { useCustomer } from "hooks/useCustomer";
 
-* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
+const Profile = () => {
+  // Get customer ID using the custom hook
+  const { customerId, user: currentUser, loading: authLoading } = useCustomer();
 
-// @mui material components
-import Grid from "@mui/material/Grid";
-import Divider from "@mui/material/Divider";
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
 
-// @mui icons
-import FacebookIcon from "@mui/icons-material/Facebook";
-import TwitterIcon from "@mui/icons-material/Twitter";
-import InstagramIcon from "@mui/icons-material/Instagram";
+  const [errors, setErrors] = useState({});
+  const [apiError, setApiError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [fetchingProfile, setFetchingProfile] = useState(true);
 
-// Material Dashboard 2 React components
-import MDBox from "components/MDBox";
-import MDTypography from "components/MDTypography";
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const SIDEBAR_WIDTH = 280;
 
-// Material Dashboard 2 React example components
-import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
-import DashboardNavbar from "examples/Navbars/DashboardNavbar";
-import Footer from "examples/Footer";
-import ProfileInfoCard from "examples/Cards/InfoCards/ProfileInfoCard";
-import ProfilesList from "examples/Lists/ProfilesList";
-import DefaultProjectCard from "examples/Cards/ProjectCards/DefaultProjectCard";
+  // Fetch user profile data whenever component mounts or customerId changes
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!customerId) return;
 
-// Overview page components
-import Header from "layouts/profile/components/Header";
-import PlatformSettings from "layouts/profile/components/PlatformSettings";
+      try {
+        setFetchingProfile(true);
+        console.log("Fetching profile for customer ID:", customerId);
 
-// Data
-import profilesListData from "layouts/profile/data/profilesListData";
+        // Try to fetch profile from API
+        const response = await axiosInstance.get(`/customers/edit-profile/${customerId}`);
+        console.log("Profile fetched:", response.data);
 
-// Images
-import homeDecor1 from "assets/images/home-decor-1.jpg";
-import homeDecor2 from "assets/images/home-decor-2.jpg";
-import homeDecor3 from "assets/images/home-decor-3.jpg";
-import homeDecor4 from "assets/images/home-decor-4.jpeg";
-import team1 from "assets/images/team-1.jpg";
-import team2 from "assets/images/team-2.jpg";
-import team3 from "assets/images/team-3.jpg";
-import team4 from "assets/images/team-4.jpg";
+        const userData = response.data.user || response.data.customer || response.data;
 
-function Overview() {
+        // Update form with fetched data
+        setForm({
+          name: userData.name || "",
+          email: userData.email || "",
+          password: "",
+          confirmPassword: "",
+        });
+
+        // Update localStorage with fresh data
+        localStorage.setItem("user", JSON.stringify(userData));
+      } catch (err) {
+        console.warn("Could not fetch profile from API, using cached data:", err);
+
+        // Fallback to cached user data from localStorage
+        if (currentUser) {
+          setForm({
+            name: currentUser.name || "",
+            email: currentUser.email || "",
+            password: "",
+            confirmPassword: "",
+          });
+        }
+      } finally {
+        setFetchingProfile(false);
+      }
+    };
+
+    fetchProfile();
+  }, [customerId]); // Re-fetch when customerId changes
+
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+    setErrors({ ...errors, [e.target.name]: "" });
+  };
+
+  const validate = () => {
+    const newErrors = {};
+    if (!form.name.trim()) newErrors.name = "Full name is required";
+
+    if (form.password) {
+      if (form.password.length < 6) newErrors.password = "Password must be at least 6 characters";
+      if (form.password !== form.confirmPassword)
+        newErrors.confirmPassword = "Passwords do not match";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setApiError("");
+    setSuccess("");
+
+    if (!validate()) return;
+
+    try {
+      setLoading(true);
+
+      // Prepare request body
+      const requestBody = {
+        name: form.name,
+      };
+
+      // Only include password fields if password is being updated
+      if (form.password) {
+        requestBody.password = form.password;
+        requestBody.password_confirmation = form.confirmPassword;
+      }
+
+      // Make API call with axios instance (auth token added automatically by interceptor)
+      const response = await axiosInstance.post(
+        `/customers/update-profile/${customerId}`,
+        requestBody
+      );
+
+      console.log("Profile updated:", response.data);
+
+      // Update localStorage with new user data if returned
+      const updatedUser = response.data.user || response.data.customer || response.data;
+      if (updatedUser) {
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+
+        // Update form with fresh data
+        setForm({
+          name: updatedUser.name || form.name,
+          email: updatedUser.email || form.email,
+          password: "",
+          confirmPassword: "",
+        });
+      } else {
+        // Clear password fields
+        setForm({ ...form, password: "", confirmPassword: "" });
+      }
+
+      setSuccess("Profile updated successfully");
+    } catch (err) {
+      console.error("Profile update error:", err);
+
+      if (err.response) {
+        setApiError(err.response.data?.message || "Failed to update profile");
+      } else if (err.request) {
+        setApiError("Unable to reach server. Please check your connection.");
+      } else {
+        setApiError(err.message || "Something went wrong");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Show loading spinner while fetching initial data
+  if (authLoading || fetchingProfile) {
+    return (
+      <Box
+        sx={{
+          ml: `${SIDEBAR_WIDTH}px`,
+          p: 3,
+          minHeight: "100vh",
+          backgroundColor: "#e0f7fa",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
-    <DashboardLayout>
-      <DashboardNavbar />
-      <MDBox mb={2} />
-      <Header>
-        <MDBox mt={5} mb={3}>
-          <Grid container spacing={1}>
-            <Grid item xs={12} md={6} xl={4}>
-              <PlatformSettings />
-            </Grid>
-            <Grid item xs={12} md={6} xl={4} sx={{ display: "flex" }}>
-              <Divider orientation="vertical" sx={{ ml: -2, mr: 1 }} />
-              <ProfileInfoCard
-                title="profile information"
-                description="Hi, I’m Alec Thompson, Decisions: If you can’t decide, the answer is no. If two equally difficult paths, choose the one more painful in the short term (pain avoidance is creating an illusion of equality)."
-                info={{
-                  fullName: "Alec M. Thompson",
-                  mobile: "(44) 123 1234 123",
-                  email: "alecthompson@mail.com",
-                  location: "USA",
-                }}
-                social={[
-                  {
-                    link: "https://www.facebook.com/CreativeTim/",
-                    icon: <FacebookIcon />,
-                    color: "facebook",
-                  },
-                  {
-                    link: "https://twitter.com/creativetim",
-                    icon: <TwitterIcon />,
-                    color: "twitter",
-                  },
-                  {
-                    link: "https://www.instagram.com/creativetimofficial/",
-                    icon: <InstagramIcon />,
-                    color: "instagram",
-                  },
-                ]}
-                action={{ route: "", tooltip: "Edit Profile" }}
-                shadow={false}
-              />
-              <Divider orientation="vertical" sx={{ mx: 0 }} />
-            </Grid>
-            <Grid item xs={12} xl={4}>
-              <ProfilesList title="conversations" profiles={profilesListData} shadow={false} />
-            </Grid>
-          </Grid>
-        </MDBox>
-        <MDBox pt={2} px={2} lineHeight={1.25}>
-          <MDTypography variant="h6" fontWeight="medium">
-            Projects
-          </MDTypography>
-          <MDBox mb={1}>
-            <MDTypography variant="button" color="text">
-              Architects design houses
-            </MDTypography>
-          </MDBox>
-        </MDBox>
-        <MDBox p={2}>
-          <Grid container spacing={6}>
-            <Grid item xs={12} md={6} xl={3}>
-              <DefaultProjectCard
-                image={homeDecor1}
-                label="project #2"
-                title="modern"
-                description="As Uber works through a huge amount of internal management turmoil."
-                action={{
-                  type: "internal",
-                  route: "/pages/profile/profile-overview",
-                  color: "info",
-                  label: "view project",
-                }}
-                authors={[
-                  { image: team1, name: "Elena Morison" },
-                  { image: team2, name: "Ryan Milly" },
-                  { image: team3, name: "Nick Daniel" },
-                  { image: team4, name: "Peterson" },
-                ]}
-              />
-            </Grid>
-            <Grid item xs={12} md={6} xl={3}>
-              <DefaultProjectCard
-                image={homeDecor2}
-                label="project #1"
-                title="scandinavian"
-                description="Music is something that everyone has their own specific opinion about."
-                action={{
-                  type: "internal",
-                  route: "/pages/profile/profile-overview",
-                  color: "info",
-                  label: "view project",
-                }}
-                authors={[
-                  { image: team3, name: "Nick Daniel" },
-                  { image: team4, name: "Peterson" },
-                  { image: team1, name: "Elena Morison" },
-                  { image: team2, name: "Ryan Milly" },
-                ]}
-              />
-            </Grid>
-            <Grid item xs={12} md={6} xl={3}>
-              <DefaultProjectCard
-                image={homeDecor3}
-                label="project #3"
-                title="minimalist"
-                description="Different people have different taste, and various types of music."
-                action={{
-                  type: "internal",
-                  route: "/pages/profile/profile-overview",
-                  color: "info",
-                  label: "view project",
-                }}
-                authors={[
-                  { image: team4, name: "Peterson" },
-                  { image: team3, name: "Nick Daniel" },
-                  { image: team2, name: "Ryan Milly" },
-                  { image: team1, name: "Elena Morison" },
-                ]}
-              />
-            </Grid>
-            <Grid item xs={12} md={6} xl={3}>
-              <DefaultProjectCard
-                image={homeDecor4}
-                label="project #4"
-                title="gothic"
-                description="Why would anyone pick blue over pink? Pink is obviously a better color."
-                action={{
-                  type: "internal",
-                  route: "/pages/profile/profile-overview",
-                  color: "info",
-                  label: "view project",
-                }}
-                authors={[
-                  { image: team4, name: "Peterson" },
-                  { image: team3, name: "Nick Daniel" },
-                  { image: team2, name: "Ryan Milly" },
-                  { image: team1, name: "Elena Morison" },
-                ]}
-              />
-            </Grid>
-          </Grid>
-        </MDBox>
-      </Header>
-      <Footer />
-    </DashboardLayout>
-  );
-}
+    <Box
+      sx={{
+        ml: `${SIDEBAR_WIDTH}px`,
+        p: 3,
+        minHeight: "100vh",
+        backgroundColor: "#e0f7fa",
+      }}
+    >
+      <Card sx={{ maxWidth: 900, width: "100%", p: 4, borderRadius: 3 }}>
+        {/* HEADER */}
+        <Box textAlign="center" mb={3}>
+          <Box
+            sx={{
+              width: 64,
+              height: 64,
+              mx: "auto",
+              mb: 2,
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, #00c6a7, #1e88e5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <PersonOutlineIcon sx={{ color: "#fff", fontSize: 32 }} />
+          </Box>
 
-export default Overview;
+          <Typography variant="h5" fontWeight={700}>
+            Update Profile
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Update your information and verification documents
+          </Typography>
+        </Box>
+
+        {/* API ERROR / SUCCESS */}
+        {apiError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setApiError("")}>
+            {apiError}
+          </Alert>
+        )}
+
+        {success && (
+          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess("")}>
+            {success}
+          </Alert>
+        )}
+
+        {/* FORM */}
+        <Box component="form" onSubmit={handleSubmit}>
+          <Grid container spacing={3}>
+            {/* NAME */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Full Name *"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                error={!!errors.name}
+                helperText={errors.name}
+                disabled={loading}
+              />
+            </Grid>
+
+            {/* EMAIL */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Email Address *"
+                name="email"
+                value={form.email}
+                onChange={handleChange}
+                error={!!errors.email}
+                helperText={errors.email}
+                disabled
+              />
+            </Grid>
+
+            {/* PASSWORD */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="New Password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                value={form.password}
+                onChange={handleChange}
+                error={!!errors.password}
+                helperText={errors.password}
+                disabled={loading}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton onClick={() => setShowPassword(!showPassword)}>
+                        {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+
+            {/* CONFIRM PASSWORD */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Confirm New Password"
+                name="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                value={form.confirmPassword}
+                onChange={handleChange}
+                error={!!errors.confirmPassword}
+                helperText={errors.confirmPassword}
+                disabled={loading}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
+                        {showConfirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+          </Grid>
+
+          {/* BUTTONS */}
+          <Box mt={4} display="flex" gap={2}>
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={() => window.location.reload()}
+              disabled={loading}
+              sx={{
+                color: "#00796b",
+                borderColor: "#00796b",
+                "&:hover": {
+                  backgroundColor: "#b2dfdb",
+                  borderColor: "#00796b",
+                },
+              }}
+            >
+              Cancel
+            </Button>
+
+            <Button
+              type="submit"
+              fullWidth
+              disabled={loading}
+              sx={{
+                color: "#fff",
+                fontWeight: 600,
+                background: "linear-gradient(135deg,#00c6a7,#1e88e5)",
+                "&:hover": {
+                  background: "linear-gradient(135deg,#00b39d,#1565c0)",
+                },
+              }}
+            >
+              {loading ? "Updating..." : "Update Profile"}
+            </Button>
+          </Box>
+        </Box>
+      </Card>
+    </Box>
+  );
+};
+
+export default Profile;

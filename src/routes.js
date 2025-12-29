@@ -37,15 +37,12 @@ Coded by www.creative-tim.com
 
 // Material Dashboard 2 React layouts
 import Dashboard from "layouts/dashboard";
-import Tables from "layouts/tables";
-import Billing from "layouts/billing";
-import RTL from "layouts/rtl";
-import Notifications from "layouts/notifications";
 import Profile from "layouts/profile";
 import SignIn from "layouts/authentication/sign-in";
 import SignUp from "layouts/authentication/sign-up";
 import CreateJob from "layouts/createJob";
-
+import JobsHistory from "layouts/JobsHistory";
+import PaymentsHistory from "layouts/PaymentsHistory";
 // @mui icons
 import Icon from "@mui/material/Icon";
 
@@ -66,14 +63,14 @@ const routes = [
     route: "/create-job",
     component: <CreateJob />,
   },
-  // {
-  //   type: "collapse",
-  //   name: "Billing",
-  //   key: "billing",
-  //   icon: <Icon fontSize="small">receipt_long</Icon>,
-  //   route: "/billing",
-  //   component: <Billing />,
-  // },
+  {
+    type: "collapse",
+    name: "Payments History",
+    key: "Payments History",
+    icon: <Icon fontSize="small">payment</Icon>,
+    route: "/PaymentsHistory",
+    component: <PaymentsHistory />,
+  },
   // {
   //   type: "collapse",
   //   name: "RTL",
@@ -82,22 +79,22 @@ const routes = [
   //   route: "/rtl",
   //   component: <RTL />,
   // },
-  // {
-  //   type: "collapse",
-  //   name: "Notifications",
-  //   key: "notifications",
-  //   icon: <Icon fontSize="small">notifications</Icon>,
-  //   route: "/notifications",
-  //   component: <Notifications />,
-  // },
-  // {
-  //   type: "collapse",
-  //   name: "Profile",
-  //   key: "profile",
-  //   icon: <Icon fontSize="small">person</Icon>,
-  //   route: "/profile",
-  //   component: <Profile />,
-  // },
+  {
+    type: "collapse",
+    name: "Jobs History",
+    key: "Jobs History",
+    icon: <Icon fontSize="small">history</Icon>,
+    route: "/JobsHistory",
+    component: <JobsHistory />,
+  },
+  {
+    type: "collapse",
+    name: "Profile",
+    key: "profile",
+    icon: <Icon fontSize="small">person</Icon>,
+    route: "/profile",
+    component: <Profile />,
+  },
   {
     type: "route",
     name: "Sign In",

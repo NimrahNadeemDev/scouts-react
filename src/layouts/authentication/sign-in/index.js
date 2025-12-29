@@ -14,41 +14,185 @@ import MDButton from "components/MDButton";
 // Layout
 import BasicLayout from "layouts/authentication/components/BasicLayout";
 
-import { loginUser, isAuthenticated } from "services/authService";
-
 // Image
 import bgImage from "assets/images/bg-sign-in-basic.jpeg";
+
+// Axios and auth helpers
+import axiosInstance, { getCustomerId, getAuthToken } from "config/axiosConfig";
+
+// Helper function to decode JWT and extract customer ID
+const decodeJWT = (token) => {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch (error) {
+    console.error("Error decoding JWT:", error);
+    return null;
+  }
+};
 
 function Basic() {
   const navigate = useNavigate();
 
+  // Form state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // UI states
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Error message shown at top
   const [error, setError] = useState("");
 
+  // Toggle remember me
   const handleSetRememberMe = () => setRememberMe(!rememberMe);
 
+  // Redirect if already logged in - Only check once on mount
   useEffect(() => {
-    if (isAuthenticated()) navigate("/dashboard");
-  }, [navigate]);
+    const token = getAuthToken();
+    const customerId = getCustomerId();
+
+    if (token && customerId) {
+      console.log("User already authenticated, redirecting to dashboard");
+      navigate("/dashboard");
+    }
+  }, []);
 
   const handleSignIn = async () => {
+    setError(""); // clear old errors
+
+    // Validation
     if (!email || !password) {
       setError("Email and password are required");
       return;
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
     try {
       setLoading(true);
-      setError("");
 
-      await loginUser(email, password); // token saved in localStorage automatically
-      navigate("/dashboard");
+      // Make API call with Axios
+      const response = await axiosInstance.post("/customers/login", {
+        email,
+        password,
+      });
+
+      console.log("Login API response:", response.data);
+
+      const { access_token } = response.data;
+
+      // Validate response data
+      if (!access_token) {
+        setError("No authentication token received. Please contact support.");
+        setLoading(false);
+        return;
+      }
+
+      // Decode JWT to extract customer ID and other info
+      const decodedToken = decodeJWT(access_token);
+      console.log("Decoded JWT:", decodedToken);
+
+      if (!decodedToken) {
+        setError("Invalid token received. Please contact support.");
+        setLoading(false);
+        return;
+      }
+
+      // Extract customer ID from token (it's in the "sub" field)
+      const customerId = decodedToken.sub;
+
+      if (!customerId) {
+        setError("Customer ID not found in token. Please contact support.");
+        setLoading(false);
+        return;
+      }
+
+      // Store the token
+      localStorage.setItem("authToken", access_token);
+      localStorage.setItem("customerId", customerId.toString());
+
+      console.log("Token stored, now fetching user profile...");
+
+      // Fetch full user profile using the customer ID
+      try {
+        const profileResponse = await axiosInstance.get(`/customers/update-profile/${customerId}`);
+        console.log("Profile API response:", profileResponse.data);
+
+        const userData =
+          profileResponse.data.user || profileResponse.data.customer || profileResponse.data;
+
+        if (userData) {
+          // Store user data
+          localStorage.setItem(
+            "user",
+            JSON.stringify({
+              id: customerId,
+              email: email,
+              ...userData,
+            })
+          );
+          console.log("User data stored:", userData);
+        } else {
+          // If profile fetch fails, store minimal user data
+          localStorage.setItem(
+            "user",
+            JSON.stringify({
+              id: customerId,
+              email: email,
+              role: decodedToken.role || "Customer",
+            })
+          );
+          console.log("Stored minimal user data from token");
+        }
+      } catch (profileErr) {
+        console.warn("Could not fetch full profile, using token data:", profileErr);
+
+        // Store minimal user data from token
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            id: customerId,
+            email: email,
+            role: decodedToken.role || "Customer",
+          })
+        );
+      }
+
+      console.log("Login successful! Customer ID:", customerId);
+
+      // Redirect to dashboard after a brief delay
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 500);
     } catch (err) {
-      setError(err.message || "Invalid login credentials");
-    } finally {
+      console.error("Login error:", err);
+
+      // Better error handling
+      if (err.response) {
+        // Server responded with error
+        const errorMessage = err.response.data?.message || "Invalid credentials";
+        setError(errorMessage);
+      } else if (err.request) {
+        // Request made but no response
+        setError("Unable to reach server. Please check your internet connection.");
+      } else {
+        // Other errors
+        setError(err.message || "Login failed. Please try again.");
+      }
+
       setLoading(false);
     }
   };
@@ -56,6 +200,7 @@ function Basic() {
   return (
     <BasicLayout image={bgImage}>
       <Card>
+        {/* Header */}
         <MDBox
           variant="gradient"
           bgColor="info"
@@ -81,6 +226,15 @@ function Basic() {
               handleSignIn();
             }}
           >
+            {/* API / Validation Error Message (TOP) */}
+            {error && (
+              <MDBox mb={2} p={2} bgcolor="error.light" borderRadius="md">
+                <MDTypography variant="caption" color="error" fontWeight="medium">
+                  {error}
+                </MDTypography>
+              </MDBox>
+            )}
+
             {/* Email */}
             <MDBox mb={2}>
               <MDInput
@@ -89,6 +243,7 @@ function Basic() {
                 fullWidth
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
               />
             </MDBox>
 
@@ -100,21 +255,13 @@ function Basic() {
                 fullWidth
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
               />
             </MDBox>
 
-            {/* Error message */}
-            {error && (
-              <MDBox mb={2}>
-                <MDTypography variant="caption" color="error">
-                  {error}
-                </MDTypography>
-              </MDBox>
-            )}
-
             {/* Remember me */}
             <MDBox display="flex" alignItems="center" ml={-1}>
-              <Switch checked={rememberMe} onChange={handleSetRememberMe} />
+              <Switch checked={rememberMe} onChange={handleSetRememberMe} disabled={loading} />
               <MDTypography
                 variant="button"
                 fontWeight="regular"
@@ -128,14 +275,7 @@ function Basic() {
 
             {/* Sign in button */}
             <MDBox mt={4} mb={1}>
-              <MDButton
-                type="submit"
-                variant="gradient"
-                color="info"
-                fullWidth
-                onClick={handleSignIn}
-                disabled={loading}
-              >
+              <MDButton type="submit" variant="gradient" color="info" fullWidth disabled={loading}>
                 {loading ? "Signing in..." : "Sign in"}
               </MDButton>
             </MDBox>
