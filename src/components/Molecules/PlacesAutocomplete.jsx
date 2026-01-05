@@ -158,27 +158,42 @@ export default function PlacesAutocomplete({ onSelect, selectedMarker }) {
             fields: ["formatted_address", "geometry.location"],
           };
 
-          service.getDetails(request, (place, status) => {
-            if (
-              status === window.google.maps.places.PlacesServiceStatus.OK &&
-              place &&
-              place.geometry &&
-              place.geometry.location
-            ) {
-              const lat = place.geometry.location.lat();
-              const lng = place.geometry.location.lng();
-              const address = place.formatted_address;
+          service.getDetails(
+            { ...request, fields: ["formatted_address", "geometry", "address_component"] },
+            (place, status) => {
+              if (
+                status === window.google.maps.places.PlacesServiceStatus.OK &&
+                place &&
+                place.geometry &&
+                place.geometry.location
+              ) {
+                const lat = place.geometry.location.lat();
+                const lng = place.geometry.location.lng();
+                const address = place.formatted_address;
 
-              console.log("--- ✅ Place Details ---");
-              console.log("Full Address:", address);
-              console.log("Latitude:", lat);
-              console.log("Longitude:", lng);
-              console.log("-------------------------");
-              onSelect({ address, lat, lng });
-            } else {
-              console.error("PlacesService getDetails failed with status:", status);
+                // Extract state from address_components
+                let state = "";
+                if (place.address_components) {
+                  const stateComp = place.address_components.find((comp) =>
+                    comp.types.includes("administrative_area_level_1")
+                  );
+                  if (stateComp) state = stateComp.long_name;
+                }
+
+                console.log("--- ✅ Place Details ---");
+                console.log("Full Address:", address);
+                console.log("State:", state);
+                console.log("Latitude:", lat);
+                console.log("Longitude:", lng);
+                console.log("-------------------------");
+
+                // Pass state along with other data
+                onSelect({ address, lat, lng, state });
+              } else {
+                console.error("PlacesService getDetails failed with status:", status);
+              }
             }
-          });
+          );
         }
       }}
       onInputChange={(event, newInputValue) => {

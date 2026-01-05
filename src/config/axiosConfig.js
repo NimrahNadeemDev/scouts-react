@@ -114,19 +114,27 @@ export const setAuthData = (token, user) => {
 export const getAuthToken = () => localStorage.getItem("authToken");
 
 export const getCustomerId = () => {
-  const customerId = localStorage.getItem("customerId");
-  return customerId ? parseInt(customerId) : null;
+  try {
+    const user = JSON.parse(localStorage.getItem("user"));
+    return user?.customer_id || user?.customerId || user?.id || null;
+  } catch {
+    return null;
+  }
 };
 
 export const getUser = () => {
-  const user = localStorage.getItem("user");
-  return user ? JSON.parse(user) : null;
+  try {
+    const user = localStorage.getItem("user");
+    return user ? JSON.parse(user) : null;
+  } catch {
+    return null;
+  }
 };
 
 export const isAuthenticated = () => {
   const token = getAuthToken();
-  const customerId = getCustomerId();
-  return !!(token && customerId);
+  const user = getUser();
+  return !!(token && user?.id);
 };
 
 export const clearAuthData = () => {

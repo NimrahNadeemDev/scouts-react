@@ -18,25 +18,7 @@ import BasicLayout from "layouts/authentication/components/BasicLayout";
 import bgImage from "assets/images/bg-sign-in-basic.jpeg";
 
 // Axios and auth helpers
-import axiosInstance, { getCustomerId, getAuthToken } from "config/axiosConfig";
-
-// Helper function to decode JWT and extract customer ID
-const decodeJWT = (token) => {
-  try {
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonPayload);
-  } catch (error) {
-    console.error("Error decoding JWT:", error);
-    return null;
-  }
-};
+import axiosInstance, { getCustomerId, getAuthToken, setAuthData } from "config/axiosConfig";
 
 function Basic() {
   const navigate = useNavigate();
@@ -55,144 +37,50 @@ function Basic() {
   // Toggle remember me
   const handleSetRememberMe = () => setRememberMe(!rememberMe);
 
-  // Redirect if already logged in - Only check once on mount
-  useEffect(() => {
-    const token = getAuthToken();
-    const customerId = getCustomerId();
-
-    if (token && customerId) {
-      console.log("User already authenticated, redirecting to dashboard");
-      navigate("/dashboard");
-    }
-  }, []);
-
   const handleSignIn = async () => {
-    setError(""); // clear old errors
+    setError("");
 
-    // Validation
     if (!email || !password) {
       setError("Email and password are required");
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError("Please enter a valid email address");
       return;
     }
 
     try {
       setLoading(true);
 
-      // Make API call with Axios
-      const response = await axiosInstance.post("/customers/login", {
-        email,
-        password,
-      });
+      // Build request payload
+      const payload = { email, password };
 
-      console.log("Login API response:", response.data);
+      const response = await axiosInstance.post("/customers/login", payload);
 
-      const { access_token } = response.data;
+      console.log("Login response:", response.data);
 
-      // Validate response data
-      if (!access_token) {
-        setError("No authentication token received. Please contact support.");
-        setLoading(false);
+      const { access_token, data, success } = response.data;
+
+      if (!success || !access_token || !data?.id) {
+        setError("Unexpected login response. Please try again.");
         return;
       }
 
-      // Decode JWT to extract customer ID and other info
-      const decodedToken = decodeJWT(access_token);
-      console.log("Decoded JWT:", decodedToken);
+      // Save auth data
+      setAuthData(access_token, data);
 
-      if (!decodedToken) {
-        setError("Invalid token received. Please contact support.");
-        setLoading(false);
-        return;
-      }
-
-      // Extract customer ID from token (it's in the "sub" field)
-      const customerId = decodedToken.sub;
-
-      if (!customerId) {
-        setError("Customer ID not found in token. Please contact support.");
-        setLoading(false);
-        return;
-      }
-
-      // Store the token
-      localStorage.setItem("authToken", access_token);
-      localStorage.setItem("customerId", customerId.toString());
-
-      console.log("Token stored, now fetching user profile...");
-
-      // Fetch full user profile using the customer ID
-      try {
-        const profileResponse = await axiosInstance.get(`/customers/update-profile/${customerId}`);
-        console.log("Profile API response:", profileResponse.data);
-
-        const userData =
-          profileResponse.data.user || profileResponse.data.customer || profileResponse.data;
-
-        if (userData) {
-          // Store user data
-          localStorage.setItem(
-            "user",
-            JSON.stringify({
-              id: customerId,
-              email: email,
-              ...userData,
-            })
-          );
-          console.log("User data stored:", userData);
-        } else {
-          // If profile fetch fails, store minimal user data
-          localStorage.setItem(
-            "user",
-            JSON.stringify({
-              id: customerId,
-              email: email,
-              role: decodedToken.role || "Customer",
-            })
-          );
-          console.log("Stored minimal user data from token");
-        }
-      } catch (profileErr) {
-        console.warn("Could not fetch full profile, using token data:", profileErr);
-
-        // Store minimal user data from token
-        localStorage.setItem(
-          "user",
-          JSON.stringify({
-            id: customerId,
-            email: email,
-            role: decodedToken.role || "Customer",
-          })
-        );
-      }
-
-      console.log("Login successful! Customer ID:", customerId);
-
-      // Redirect to dashboard after a brief delay
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 500);
+      // Redirect
+      navigate("/dashboard");
     } catch (err) {
       console.error("Login error:", err);
 
-      // Better error handling
       if (err.response) {
-        // Server responded with error
-        const errorMessage = err.response.data?.message || "Invalid credentials";
-        setError(errorMessage);
+        const backendMessage =
+          err.response.data?.message || err.response.data?.error || "Login failed";
+        setError(backendMessage);
       } else if (err.request) {
-        // Request made but no response
         setError("Unable to reach server. Please check your internet connection.");
       } else {
-        // Other errors
-        setError(err.message || "Login failed. Please try again.");
+        // Request setup / unexpected error
+        setError(err.message || "Something went wrong. Please try again.");
       }
-
+    } finally {
       setLoading(false);
     }
   };

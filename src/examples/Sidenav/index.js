@@ -1,18 +1,3 @@
-/**
-=========================================================
-* Material Dashboard 2 React - v2.2.0
-=========================================================
-
-* Product Page: https://www.creative-tim.com/product/material-dashboard-react
-* Copyright 2023 Creative Tim (https://www.creative-tim.com)
-
-Coded by www.creative-tim.com
-
- =========================================================
-
-* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
-
 import { useEffect } from "react";
 
 // react-router-dom components
@@ -101,11 +86,21 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
             icon={icon}
             active={key === collapseName}
             noCollapse={noCollapse}
+            // CHANGE: Pass closeSidenav function to collapse component
+            // This allows the sidenav to close when a menu item is clicked on mobile
+            onClose={closeSidenav}
           />
         </Link>
       ) : (
         <NavLink key={key} to={route}>
-          <SidenavCollapse name={name} icon={icon} active={key === collapseName} />
+          <SidenavCollapse
+            name={name}
+            icon={icon}
+            active={key === collapseName}
+            // CHANGE: Pass closeSidenav function to collapse component
+            // This allows the sidenav to close when a menu item is clicked on mobile
+            onClose={closeSidenav}
+          />
         </NavLink>
       );
     } else if (type === "title") {
@@ -159,6 +154,37 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
           <MDTypography variant="h6" color="secondary">
             <Icon sx={{ fontWeight: "bold" }}>close</Icon>
           </MDTypography>
+          <MDBox
+            display={{ xs: "block", xl: "none" }}
+            position="absolute"
+            top={0}
+            right={0}
+            p={1.625}
+            onClick={closeSidenav}
+            sx={{ cursor: "pointer" }}
+          >
+            <MDTypography variant="h6" color="secondary">
+              <Icon sx={{ fontWeight: "bold" }}>close</Icon>
+            </MDTypography>
+          </MDBox>
+
+          {/* CHANGE: Add collapse toggle button for desktop (top-right corner) */}
+          {/* This icon button toggles between collapsed and expanded sidenav states */}
+          <MDBox
+            display={{ xs: "none", xl: "block" }}
+            position="absolute"
+            top={0}
+            right={0}
+            p={1.625}
+            onClick={() => setMiniSidenav(dispatch, !miniSidenav)}
+            sx={{ cursor: "pointer" }}
+          >
+            <MDTypography variant="h6" color={textColor}>
+              <Icon sx={{ fontWeight: "bold" }}>
+                {miniSidenav ? "chevron_right" : "chevron_left"}
+              </Icon>
+            </MDTypography>
+          </MDBox>
         </MDBox>
         <MDBox component={NavLink} to="/dashboard" display="flex" alignItems="center">
           {brand && (

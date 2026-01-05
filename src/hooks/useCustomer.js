@@ -9,32 +9,34 @@ export const useCustomer = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // ❌ Not logged in → redirect
     if (!isAuthenticated()) {
       console.log("User not authenticated, redirecting to sign-in");
-      navigate("/authentication/sign-in");
+      navigate("/authentication/sign-in", { replace: true });
       return;
     }
 
-    const id = getCustomerId();
-    const userData = getUser();
+    // ✅ Read from localStorage (login response)
+    const storedUser = getUser();
+    const id = storedUser?.id ?? getCustomerId();
 
-    if (!id) {
-      console.error("Customer ID not found, clearing auth and redirecting");
+    if (!id || !storedUser) {
+      console.error("Invalid auth data, clearing storage");
       clearAuthData();
-      navigate("/authentication/sign-in");
+      navigate("/authentication/sign-in", { replace: true });
       return;
     }
 
     setCustomerId(id);
-    setUser(userData);
+    setUser(storedUser);
     setLoading(false);
 
-    console.log("Customer loaded:", { customerId: id, user: userData });
+    console.log("Customer loaded:", { customerId: id, user: storedUser });
   }, [navigate]);
 
   const logout = () => {
     clearAuthData();
-    navigate("/authentication/sign-in");
+    navigate("/authentication/sign-in", { replace: true });
   };
 
   return {

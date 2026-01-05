@@ -55,10 +55,15 @@ const SelectJobLocation = ({ marker, setMarker }) => {
 
         geocoder.geocode({ location: latlng }, (results, status) => {
           let title = `Job Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`; // Default title
-
+          let state = "";
           if (status === "OK") {
             if (results[0]) {
               title = results[0].formatted_address; // Use the best address
+              // Extract state from address components
+              const stateComp = results[0].address_components.find((comp) =>
+                comp.types.includes("administrative_area_level_1")
+              );
+              if (stateComp) state = stateComp.long_name;
             } else {
               console.warn("No results found for reverse geocoding");
             }
@@ -72,6 +77,7 @@ const SelectJobLocation = ({ marker, setMarker }) => {
             lat: lat,
             lng: lng,
             title: title,
+            state: state,
           };
           setMarker(newMarker);
         });
@@ -82,6 +88,7 @@ const SelectJobLocation = ({ marker, setMarker }) => {
           lat: lat,
           lng: lng,
           title: `Job Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+          state: "",
         };
         setMarker(newMarker);
       }
@@ -89,12 +96,13 @@ const SelectJobLocation = ({ marker, setMarker }) => {
   };
 
   const handlePlaceSelect = (location) => {
-    const { lat, lng, address } = location;
+    const { lat, lng, address, state } = location;
     const newMarker = {
       id: Date.now(),
       lat,
       lng,
       title: address,
+      state: state || "",
     };
     setMarker(newMarker);
   };
@@ -151,7 +159,12 @@ const SelectJobLocation = ({ marker, setMarker }) => {
               onClick={handleMapClick}
               gestureHandling={"greedy"}
               reuseMaps={true}
-              style={{ width: "100%", height: "600px" }}
+              style={{
+                width: "50%",
+                height: "400px",
+                justifyContent: "center",
+                alignSelf: "center",
+              }}
             >
               {/* Render job marker */}
               {marker.lat && marker.lng && (

@@ -397,7 +397,11 @@ const CreateJobPage = () => {
       openSnackBar("error", "please fill required fields to continue");
     }
   };
-
+  // Add this helper function after formatTime function (around line 435)
+  const formatDateTime = (date, time) => {
+    if (!date || !time) return "N/A";
+    return `${formatDate(date)} at ${formatTime(time)}`;
+  };
   const handleBack = () => {
     setActiveStep((prev) => prev - 1);
   };
@@ -422,6 +426,8 @@ const CreateJobPage = () => {
       setSubmitting(false);
       return;
     }
+
+    // Add current job to the queue before processing
     const currentJob = {
       type: values.type,
       description: values.description,
@@ -440,62 +446,82 @@ const CreateJobPage = () => {
     let successCount = 0;
     const failedJobs = [];
 
+    // Set concurrent limit to 3 jobs at a time to prevent overwhelming the API
+    const CONCURRENT_LIMIT = 3;
+
     try {
-      for (let i = 0; i < allJobs.length; i++) {
-        const job = allJobs[i];
+      // Process jobs in batches of CONCURRENT_LIMIT
+      for (let i = 0; i < allJobs.length; i += CONCURRENT_LIMIT) {
+        const batch = allJobs.slice(i, i + CONCURRENT_LIMIT);
 
-        try {
-          const startDateTime = new Date(`${job.startDate}T${job.startTime}`);
-          const endDateTime = new Date(`${job.endDate}T${job.endTime}`);
+        // Process current batch concurrently
+        const batchPromises = batch.map(async (job, batchIndex) => {
+          const jobIndex = i + batchIndex;
 
-          const payload = {
-            customer_id: customerId,
-            title: job.type,
-            description: job.description,
-            address: job.marker.title,
-            lat: String(job.marker.lat),
-            lng: String(job.marker.lng),
-            startTime: formatDateTimeForAPI(startDateTime),
-            endTime: formatDateTimeForAPI(endDateTime),
-            type: "asap",
-            radius: job.searchRadius,
-            numberOfGuards: job.numberOfGuards,
-          };
+          try {
+            const startDateTime = new Date(`${job.startDate}T${job.startTime}`);
+            const endDateTime = new Date(`${job.endDate}T${job.endTime}`);
 
-          console.log(`Posting job ${i + 1}/${allJobs.length}:`, payload);
+            const payload = {
+              customer_id: customerId,
+              title: job.type,
+              description: job.description,
+              address: job.marker.title,
+              lat: String(job.marker.lat),
+              lng: String(job.marker.lng),
+              startTime: formatDateTimeForAPI(startDateTime),
+              endTime: formatDateTimeForAPI(endDateTime),
+              type: "asap",
+              radius: job.searchRadius,
+              numberOfGuards: job.numberOfGuards,
+              state: "Victoria",
+              // state: job.marker.state || "",
+            };
 
-          // Make API call
-          const response = await postJobWithRetry(payload);
-          console.log(`Job ${i + 1} posted successfully:`, response.data);
-          successCount++;
-        } catch (jobErr) {
-          console.error(`Failed to post job ${i + 1}:`, jobErr);
+            console.log(`Posting job ${jobIndex + 1}/${allJobs.length}:`, payload);
 
-          let errorMessage = "Unknown error occurred";
+            const response = await postJobWithRetry(payload);
+            console.log(`Job ${jobIndex + 1} posted successfully:`, response.data);
 
-          if (jobErr.response) {
-            // Server responded with error
-            errorMessage =
-              jobErr.response.data?.message ||
-              jobErr.response.data?.error ||
-              `Server error: ${jobErr.response.status}`;
-          } else if (jobErr.message) {
-            // Network/timeout error
-            errorMessage = jobErr.message;
+            return { success: true, jobIndex };
+          } catch (jobErr) {
+            console.error(`Failed to post job ${jobIndex + 1}:`, jobErr);
+
+            let errorMessage = "Unknown error occurred";
+
+            if (jobErr.response) {
+              errorMessage =
+                jobErr.response.data?.message ||
+                jobErr.response.data?.error ||
+                `Server error: ${jobErr.response.status}`;
+            } else if (jobErr.message) {
+              errorMessage = jobErr.message;
+            }
+
+            return {
+              success: false,
+              jobIndex,
+              job,
+              error: errorMessage,
+            };
           }
+        });
 
-          console.error("Error details:", {
-            message: errorMessage,
-            response: jobErr.response?.data,
-            status: jobErr.response?.status,
-          });
+        // Wait for current batch to complete
+        const batchResults = await Promise.all(batchPromises);
 
-          failedJobs.push({
-            index: i + 1,
-            job,
-            error: errorMessage,
-          });
-        }
+        // Process batch results
+        batchResults.forEach((result) => {
+          if (result.success) {
+            successCount++;
+          } else {
+            failedJobs.push({
+              index: result.jobIndex + 1,
+              job: result.job,
+              error: result.error,
+            });
+          }
+        });
       }
 
       // Show appropriate success/error messages
@@ -748,10 +774,10 @@ const CreateJobPage = () => {
                               <MenuItem value="">
                                 <em>Select Job Type</em>
                               </MenuItem>
-                              <MenuItem value="event security">Event Security</MenuItem>
-                              <MenuItem value="residential security">Residential Security</MenuItem>
-                              <MenuItem value="corporate security">Corporate Security</MenuItem>
-                              <MenuItem value="personal bodyguard">Personal Bodyguard</MenuItem>
+                              <MenuItem value="Event security">Event Security</MenuItem>
+                              <MenuItem value="Residential security">Residential Security</MenuItem>
+                              <MenuItem value="Corporate security">Corporate Security</MenuItem>
+                              <MenuItem value="Personal bodyguard">Personal Bodyguard</MenuItem>
                               <MenuItem value="Others">Others</MenuItem>
                             </Select>
                             {touched.type && errors.type && (
