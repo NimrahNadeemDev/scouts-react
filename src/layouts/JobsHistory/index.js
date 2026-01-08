@@ -31,8 +31,6 @@ import {
 } from "@mui/material";
 import {
   Search as SearchIcon,
-  GridView as GridViewIcon,
-  ViewList as ViewListIcon,
   FilterList as FilterIcon,
   Sort as SortIcon,
   LocationOn as LocationIcon,
@@ -57,13 +55,12 @@ function JobsHistory() {
   const [jobs, setJobs] = useState([]);
   const [filteredJobs, setFilteredJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState("list"); // 'grid' or 'list'
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sortBy, setSortBy] = useState("Start Date (Newest)");
   const [selectedJob, setSelectedJob] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [page, setPage] = useState(1); // Current page
+  const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(5);
 
   useEffect(() => {
@@ -117,26 +114,29 @@ function JobsHistory() {
     });
 
     setFilteredJobs(result);
-    setPage(1); // reset page whenever filters or search change
+    setPage(1); // Reset to first page when filters change
   }, [searchTerm, statusFilter, sortBy, jobs]);
 
   const statusColor = (status) => {
     switch (status?.toLowerCase()) {
       case "pending":
         return "warning";
-      case "approved":
-      case "open":
+      case "confirmed":
         return "success";
-      case "rejected":
-      case "closed":
-        return "error";
-      default:
+      case "completed":
         return "info";
+      default:
+        return "secondary";
     }
   };
 
   const handleChangePage = (event, value) => {
     setPage(value);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(Number(event.target.value));
+    setPage(1);
   };
 
   const handleViewJob = (job) => {
@@ -168,7 +168,9 @@ function JobsHistory() {
     });
   };
 
-  const paginatedJobs = filteredJobs.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+  const startIdx = (page - 1) * rowsPerPage;
+  const endIdx = startIdx + rowsPerPage;
+  const paginatedJobs = filteredJobs.slice(startIdx, endIdx);
 
   if (loading) {
     return (
@@ -196,7 +198,7 @@ function JobsHistory() {
           <MDBadge
             variant="gradient"
             color="success"
-            badgeContent={`Total Jobs: ${jobs.length} / ${jobs.length}`}
+            badgeContent={`Total Jobs: ${jobs.length}`}
             size="lg"
           />
         </MDBox>
@@ -276,42 +278,6 @@ function JobsHistory() {
                     <MenuItem value="Start Date (Oldest)">Start Date (Oldest)</MenuItem>
                   </Select>
                 </FormControl>
-
-                {/* View Toggle */}
-                {/* <MDBox display="flex" gap={0.5}>
-                  <IconButton
-                    size="small"
-                    onClick={() => setViewMode("grid")}
-                    sx={{
-                      bgcolor: viewMode === "grid" ? "info.main" : "grey.200",
-                      color: viewMode === "grid" ? "white" : "text.secondary",
-                      borderRadius: 1.5,
-                      width: 36,
-                      height: 36,
-                      "&:hover": {
-                        bgcolor: viewMode === "grid" ? "info.dark" : "grey.300",
-                      },
-                    }}
-                  >
-                    <GridViewIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    onClick={() => setViewMode("list")}
-                    sx={{
-                      bgcolor: viewMode === "list" ? "info.main" : "grey.200",
-                      color: viewMode === "list" ? "white" : "text.secondary",
-                      borderRadius: 1.5,
-                      width: 36,
-                      height: 36,
-                      "&:hover": {
-                        bgcolor: viewMode === "list" ? "info.dark" : "grey.300",
-                      },
-                    }}
-                  >
-                    <ViewListIcon fontSize="small" />
-                  </IconButton>
-                </MDBox> */}
               </MDBox>
             </Grid>
           </Grid>
@@ -355,7 +321,9 @@ function JobsHistory() {
           <Card>
             <MDBox p={3} textAlign="center">
               <MDTypography variant="h6" color="text">
-                No jobs found
+                {searchTerm || statusFilter !== "All"
+                  ? "No jobs match your search or filters."
+                  : "No jobs found"}
               </MDTypography>
             </MDBox>
           </Card>
@@ -363,7 +331,7 @@ function JobsHistory() {
           <>
             <Grid container spacing={2}>
               {paginatedJobs.map((job, index) => (
-                <Grid item xs={12} key={index}>
+                <Grid item xs={12} key={job.id || index}>
                   <Card>
                     <MDBox p={2.5}>
                       <Grid container spacing={2} alignItems="center">
@@ -376,10 +344,9 @@ function JobsHistory() {
                             mt={0.5}
                             fontWeight="bold"
                           >
-                            ID: #{(page - 1) * rowsPerPage + index + 1}
+                            ID: #{startIdx + index + 1}
                           </MDTypography>
                         </Grid>
-
                         {/* Location Column */}
                         <Grid item xs={12} md={2.5}>
                           <MDBox display="flex" alignItems="flex-start" gap={1}>
@@ -388,7 +355,6 @@ function JobsHistory() {
                             </MDTypography>
                           </MDBox>
                         </Grid>
-
                         {/* Schedule Column */}
                         <Grid item xs={12} md={2.5}>
                           <MDTypography variant="caption" display="block">
@@ -410,7 +376,6 @@ function JobsHistory() {
                             {formatTime(job.end)}
                           </MDTypography>
                         </Grid>
-
                         {/* Hours Column */}
                         <Grid item xs={12} md={2.2}>
                           <MDBox display="flex" alignItems="center" gap={1}>
@@ -420,7 +385,6 @@ function JobsHistory() {
                             </MDTypography>
                           </MDBox>
                         </Grid>
-
                         {/* Status Column */}
                         <Grid item xs={12} md={1}>
                           <MDBadge
@@ -446,14 +410,48 @@ function JobsHistory() {
                 </Grid>
               ))}
             </Grid>
-            <MDBox display="flex" justifyContent="center" mt={3}>
-              <MDPagination
-                count={Math.ceil(filteredJobs.length / rowsPerPage)}
-                page={page}
-                onChange={handleChangePage}
-                variant="outlined"
-                color="info"
-              />
+
+            {/* Pagination */}
+            <MDBox
+              mt={4}
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+              flexWrap="wrap"
+              gap={2}
+            >
+              <MDTypography variant="caption" color="text">
+                Showing {startIdx + 1} to {Math.min(endIdx, filteredJobs.length)} of{" "}
+                {filteredJobs.length} jobs
+              </MDTypography>
+
+              <MDBox display="flex" alignItems="center" gap={2}>
+                <MDTypography variant="caption" color="text">
+                  Rows per page:
+                </MDTypography>
+                <Select
+                  value={rowsPerPage}
+                  onChange={handleChangeRowsPerPage}
+                  size="small"
+                  sx={{ height: 32 }}
+                >
+                  {[5, 10, 25, 50].map((num) => (
+                    <MenuItem key={num} value={num}>
+                      {num}
+                    </MenuItem>
+                  ))}
+                </Select>
+
+                <MDPagination
+                  count={Math.ceil(filteredJobs.length / rowsPerPage)}
+                  page={page}
+                  onChange={handleChangePage}
+                  variant="outlined"
+                  color="info"
+                  showFirstButton
+                  showLastButton
+                />
+              </MDBox>
             </MDBox>
           </>
         )}
@@ -482,10 +480,10 @@ function JobsHistory() {
           {selectedJob ? (
             <Grid container spacing={3}>
               {/* Status */}
-              <Grid item xs={12} md={5} gap={3}>
+              <Grid item xs={12} md={5}>
                 <Card sx={{ borderRadius: 2 }}>
-                  <MDBox p={3} display="flex" alignItems="center" gap={16}>
-                    <MDTypography variant="button" fontWeight="bold" color="text">
+                  <MDBox p={1} display="block" alignItems="center">
+                    <MDTypography variant="button" fontWeight="bold" color="text" display="block">
                       Status
                     </MDTypography>
                     <MDBadge
@@ -512,7 +510,7 @@ function JobsHistory() {
                 </Card>
               </Grid>
 
-              {/* Description */}
+              {/* Guard Assigned */}
               <Grid item xs={12} md={5}>
                 <Card sx={{ borderRadius: 2 }}>
                   <MDBox p={1}>
@@ -534,59 +532,75 @@ function JobsHistory() {
                       Job ID
                     </MDTypography>
                     <MDTypography variant="body2" mt={0.5}>
-                      {jobs.findIndex((j) => j.id === selectedJob.id) + 1}
+                      #{jobs.findIndex((j) => j.id === selectedJob.id) + 1}
                     </MDTypography>
                   </MDBox>
                 </Card>
               </Grid>
 
               {/* Location */}
-              <Grid item xs={12} md={6}>
-                <MDTypography variant="button" fontWeight="bold" color="text" display="block">
-                  Location
-                </MDTypography>
-                <MDBox display="flex" alignItems="center" gap={0.5} mt={0.5}>
-                  <LocationIcon fontSize="small" />
-                  <MDTypography variant="body2">
-                    {selectedJob.site_name || "Not specified"}
-                  </MDTypography>
-                </MDBox>
+              <Grid item xs={12} md={5}>
+                <Card sx={{ borderRadius: 2 }}>
+                  <MDBox p={1}>
+                    <MDTypography variant="button" fontWeight="bold" color="text" display="block">
+                      Location
+                    </MDTypography>
+                    <MDBox display="flex" alignItems="center" gap={0.5} mt={0.5}>
+                      <LocationIcon fontSize="small" />
+                      <MDTypography variant="body2">
+                        {selectedJob.site_name || "Not specified"}
+                      </MDTypography>
+                    </MDBox>
+                  </MDBox>
+                </Card>
               </Grid>
 
               {/* Start Date & Time */}
               <Grid item xs={12} md={6}>
-                <MDTypography variant="button" fontWeight="bold" color="text" display="block">
-                  Start Date & Time
-                </MDTypography>
-                <MDBox display="flex" alignItems="center" gap={0.5} mt={0.5}>
-                  <CalendarIcon fontSize="small" />
-                  <MDTypography variant="body2">
-                    {formatDate(selectedJob.start)} at {formatTime(selectedJob.start)}
-                  </MDTypography>
-                </MDBox>
+                <Card sx={{ borderRadius: 2 }}>
+                  <MDBox p={1}>
+                    <MDTypography variant="button" fontWeight="bold" color="text" display="block">
+                      Start Date & Time
+                    </MDTypography>
+                    <MDBox display="flex" alignItems="center" gap={0.5} mt={0.5}>
+                      <CalendarIcon fontSize="small" />
+                      <MDTypography variant="body2">
+                        {formatDate(selectedJob.start)} at {formatTime(selectedJob.start)}
+                      </MDTypography>
+                    </MDBox>
+                  </MDBox>
+                </Card>
               </Grid>
 
               {/* End Date & Time */}
-              <Grid item xs={12} md={6}>
-                <MDTypography variant="button" fontWeight="bold" color="text" display="block">
-                  End Date & Time
-                </MDTypography>
-                <MDBox display="flex" alignItems="center" gap={0.5} mt={0.5}>
-                  <CalendarIcon fontSize="small" />
-                  <MDTypography variant="body2">
-                    {formatDate(selectedJob.end)} at {formatTime(selectedJob.end)}
-                  </MDTypography>
-                </MDBox>
+              <Grid item xs={12} md={5}>
+                <Card sx={{ borderRadius: 2 }}>
+                  <MDBox p={1}>
+                    <MDTypography variant="button" fontWeight="bold" color="text" display="block">
+                      End Date & Time
+                    </MDTypography>
+                    <MDBox display="flex" alignItems="center" gap={0.5} mt={0.5}>
+                      <CalendarIcon fontSize="small" />
+                      <MDTypography variant="body2">
+                        {formatDate(selectedJob.end)} at {formatTime(selectedJob.end)}
+                      </MDTypography>
+                    </MDBox>
+                  </MDBox>
+                </Card>
               </Grid>
 
               {/* Hours */}
               <Grid item xs={12} md={6}>
-                <MDTypography variant="button" fontWeight="bold" color="text" display="block">
-                  Hours
-                </MDTypography>
-                <MDTypography variant="body2" mt={0.5}>
-                  {selectedJob.hours || "N/A"} hours
-                </MDTypography>
+                <Card sx={{ borderRadius: 2 }}>
+                  <MDBox p={1}>
+                    <MDTypography variant="button" fontWeight="bold" color="text" display="block">
+                      Hours
+                    </MDTypography>
+                    <MDTypography variant="body2" mt={0.5}>
+                      {selectedJob.hours || "N/A"} hours
+                    </MDTypography>
+                  </MDBox>
+                </Card>
               </Grid>
               <Grid item xs={12}>
                 <Divider />

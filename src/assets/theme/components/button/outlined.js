@@ -1,19 +1,3 @@
-/**
-=========================================================
-* Material Dashboard 2 React - v2.2.0
-=========================================================
-
-* Product Page: https://www.creative-tim.com/product/material-dashboard-react
-* Copyright 2023 Creative Tim (https://www.creative-tim.com)
-
-Coded by www.creative-tim.com
-
- =========================================================
-
-* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
-
-// Material Dashboard 2 React Base Styles
 import colors from "assets/theme/base/colors";
 import typography from "assets/theme/base/typography";
 
@@ -28,7 +12,7 @@ const outlined = {
     minHeight: pxToRem(40),
     color: light.main,
     borderColor: light.main,
-    padding: `${pxToRem(10)} ${pxToRem(24)}`,
+    padding: `${pxToRem(20)} ${pxToRem(24)}`,
 
     "&:hover": {
       opacity: 0.75,
@@ -36,13 +20,13 @@ const outlined = {
     },
 
     "& .material-icon, .material-icons-round, svg": {
-      fontSize: `${pxToRem(16)} !important`,
+      fontSize: `${pxToRem(19)} !important`,
     },
   },
 
   small: {
     minHeight: pxToRem(32),
-    padding: `${pxToRem(6)} ${pxToRem(16)}`,
+    padding: `${pxToRem(15)} ${pxToRem(16)}`,
     fontSize: size.xs,
 
     "& .material-icon, .material-icons-round, svg": {

@@ -2,6 +2,9 @@ import React, { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { Map, Marker, InfoWindow, useMap } from "@vis.gl/react-google-maps";
 import PlacesAutocomplete from "../components/Molecules/PlacesAutocomplete";
+import MDTypography from "components/MDTypography";
+import { border } from "@mui/system";
+import MDBox from "components/MDBox";
 
 const SelectJobLocation = ({ marker, setMarker }) => {
   const [userLocation, setUserLocation] = useState(null);
@@ -118,7 +121,7 @@ const SelectJobLocation = ({ marker, setMarker }) => {
   }
 
   return (
-    <div className="w-full ">
+    <div className="w-full">
       {/* Header */}
       <div className=" mb-2">
         {marker.lat && (
@@ -127,13 +130,13 @@ const SelectJobLocation = ({ marker, setMarker }) => {
               className="bg-white p-3 rounded border border-gray-300 flex justify-between items-center cursor-pointer hover:bg-blue-50 transition"
               onClick={() => setSelectedMarker(marker)}
             >
-              <div>
-                <p className="font-semibold text-sm text-gray-800">{marker.title}</p>
-                <p className="text-xs text-gray-500">
+              {/* <div>
+                 <p className="text-xs text-gray-200">{marker.title}</p>
+                <p className="text-xs text-gray-200">
                   {marker?.lat?.toFixed(4)}, {marker?.lng?.toFixed(4)}
-                </p>
-              </div>
-              <button
+                </p> 
+              </div> */}
+              {/* <button
                 onClick={(e) => {
                   e.stopPropagation(); // Prevents the div's onClick from firing
                   removeMarker();
@@ -141,65 +144,50 @@ const SelectJobLocation = ({ marker, setMarker }) => {
                 className="text-red-500 hover:text-red-700 font-bold text-lg"
               >
                 ✕
-              </button>
+              </button> */}
             </div>
           </div>
         )}
       </div>
+      <div className="mb-2">
+        <MDTypography variant="h6" fontWeight="medium">
+          Job Location
+        </MDTypography>
+      </div>
       <div className=" flex flex-row">
         <div className="   overflow-y-auto"></div>
-        <div className="w-full   ">
-          <div className="mb-3 w-full h-15">
-            <PlacesAutocomplete onSelect={handlePlaceSelect} selectedMarker={marker} />
-          </div>
-          {userLocation && (
-            <Map
-              defaultCenter={userLocation}
-              defaultZoom={12}
-              onClick={handleMapClick}
-              gestureHandling={"greedy"}
-              reuseMaps={true}
-              style={{
-                width: "50%",
-                height: "400px",
-                justifyContent: "center",
-                alignSelf: "center",
-              }}
-            >
-              {/* Render job marker */}
-              {marker.lat && marker.lng && (
-                <Marker
-                  position={{ lat: marker.lat, lng: marker.lng }}
-                  onClick={() => setSelectedMarker(marker)}
-                  title={marker.title}
-                />
-              )}
+        <div className="w-full">
+          {/* 🔹 TITLE — COMPLETELY OUTSIDE */}
 
-              {/* Info Window for Selected Marker */}
-              {selectedMarker && (
-                <InfoWindow
-                  position={{
-                    lat: selectedMarker.lat,
-                    lng: selectedMarker.lng,
-                  }}
-                  onCloseClick={() => setSelectedMarker(null)}
-                >
-                  <div className="p-3 bg-white rounded shadow-lg">
-                    <h3 className="font-bold text-gray-800">{selectedMarker.title}</h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Lat: {selectedMarker?.lat?.toFixed(4)}, Lng: {selectedMarker?.lng?.toFixed(4)}
-                    </p>
-                    <button
-                      onClick={() => removeMarker()}
-                      className="mt-3 bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600 w-full transition"
-                    >
-                      Remove Location
-                    </button>
-                  </div>
-                </InfoWindow>
-              )}
-            </Map>
-          )}
+          {/* 🔹 BORDER STARTS HERE */}
+          <div className="border border-gray-300 rounded-lg bg-white overflow-hidden">
+            {/* Input */}
+            <div className="p-4 border-b border-gray-200">
+              <PlacesAutocomplete onSelect={handlePlaceSelect} selectedMarker={marker} />
+            </div>
+
+            {/* Map */}
+            {userLocation && (
+              <Map
+                defaultCenter={userLocation}
+                defaultZoom={12}
+                onClick={handleMapClick}
+                gestureHandling="greedy"
+                reuseMaps
+                style={{
+                  width: "100%",
+                  height: "400px",
+                }}
+              >
+                {marker?.lat && marker?.lng && (
+                  <Marker
+                    position={{ lat: marker.lat, lng: marker.lng }}
+                    onClick={() => setSelectedMarker(marker)}
+                  />
+                )}
+              </Map>
+            )}
+          </div>
         </div>
       </div>
     </div>
