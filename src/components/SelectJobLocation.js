@@ -151,7 +151,7 @@ const SelectJobLocation = ({ marker, setMarker }) => {
       </div>
       <div className="mb-2">
         <MDTypography variant="h6" fontWeight="medium">
-          Job Location
+          Location Name
         </MDTypography>
       </div>
       <div className=" flex flex-row">

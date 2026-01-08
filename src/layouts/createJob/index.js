@@ -39,12 +39,140 @@ import axiosInstance, {
 } from "config/axiosConfig";
 import { margin } from "@mui/system";
 
+// Rate structure
+const RATES = {
+  DAY: 10, // 6 AM - 6 PM on weekdays
+  NIGHT: 12, // 6 PM - 6 AM on weekdays
+  WEEKEND: 17, // All hours on Saturday/Sunday
+  HOLIDAY: 20, // Public holidays
+};
+
+// Australian Public Holidays 2025-2026
+const PUBLIC_HOLIDAYS = [
+  "2025-01-01",
+  "2025-01-27",
+  "2025-03-10",
+  "2025-04-18",
+  "2025-04-19",
+  "2025-04-21",
+  "2025-04-25",
+  "2025-06-09",
+  "2025-11-04",
+  "2025-12-25",
+  "2025-12-26",
+  "2026-01-01",
+  "2026-01-26",
+  "2026-03-02",
+  "2026-04-03",
+  "2026-04-04",
+  "2026-04-06",
+  "2026-04-25",
+  "2026-06-08",
+  "2026-11-03",
+  "2026-12-25",
+  "2026-12-26",
+];
+
+// Check if date is a public holiday
+const isPublicHoliday = (date) => {
+  const dateStr = date.toISOString().split("T")[0];
+  return PUBLIC_HOLIDAYS.includes(dateStr);
+};
+
+// Check if date is weekend
+const isWeekend = (date) => {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+};
+
 // Calculate shift hours utility
 const calculateShiftHours = (startDate, startTime, endDate, endTime) => {
   if (!startDate || !startTime || !endDate || !endTime) return 0;
   const start = new Date(`${startDate}T${startTime}`);
   const end = new Date(`${endDate}T${endTime}`);
   return (end - start) / (1000 * 60 * 60);
+};
+
+// Calculate cost breakdown by hour type
+const calculateJobCost = (startDate, startTime, endDate, endTime, numberOfGuards) => {
+  if (!startDate || !startTime || !endDate || !endTime) {
+    return { total: 0, breakdown: [], totalHours: 0 };
+  }
+
+  const start = new Date(`${startDate}T${startTime}`);
+  const end = new Date(`${endDate}T${endTime}`);
+  const totalHours = (end - start) / (1000 * 60 * 60);
+
+  if (totalHours <= 0) {
+    return { total: 0, breakdown: [], totalHours: 0 };
+  }
+
+  let dayHours = 0;
+  let nightHours = 0;
+  let weekendHours = 0;
+  let holidayHours = 0;
+
+  // Iterate through each hour
+  let current = new Date(start);
+  while (current < end) {
+    const hour = current.getHours();
+    const nextHour = new Date(current.getTime() + 60 * 60 * 1000);
+    const hourDuration = Math.min(
+      (nextHour - current) / (1000 * 60 * 60),
+      (end - current) / (1000 * 60 * 60)
+    );
+
+    if (isPublicHoliday(current)) {
+      holidayHours += hourDuration;
+    } else if (isWeekend(current)) {
+      weekendHours += hourDuration;
+    } else if (hour >= 6 && hour < 18) {
+      dayHours += hourDuration;
+    } else {
+      nightHours += hourDuration;
+    }
+
+    current = nextHour;
+  }
+
+  const breakdown = [];
+  let subtotal = 0;
+
+  if (dayHours > 0) {
+    const cost = dayHours * RATES.DAY * numberOfGuards;
+    subtotal += cost;
+    breakdown.push({ type: "Day Hours (6 AM - 6 PM)", hours: dayHours, rate: RATES.DAY, cost });
+  }
+  if (nightHours > 0) {
+    const cost = nightHours * RATES.NIGHT * numberOfGuards;
+    subtotal += cost;
+    breakdown.push({
+      type: "Night Hours (6 PM - 6 AM)",
+      hours: nightHours,
+      rate: RATES.NIGHT,
+      cost,
+    });
+  }
+  if (weekendHours > 0) {
+    const cost = weekendHours * RATES.WEEKEND * numberOfGuards;
+    subtotal += cost;
+    breakdown.push({ type: "Weekend Hours", hours: weekendHours, rate: RATES.WEEKEND, cost });
+  }
+  if (holidayHours > 0) {
+    const cost = holidayHours * RATES.HOLIDAY * numberOfGuards;
+    subtotal += cost;
+    breakdown.push({
+      type: "Public Holiday Hours",
+      hours: holidayHours,
+      rate: RATES.HOLIDAY,
+      cost,
+    });
+  }
+
+  const gst = subtotal * 0.1;
+  const total = subtotal + gst;
+
+  return { total, subtotal, gst, breakdown, totalHours };
 };
 
 // Reusable Modal Component
@@ -138,13 +266,13 @@ const CreateJobPage = () => {
       additionalDetails: Yup.string().optional(),
       marker: Yup.object()
         .shape({
-          lat: Yup.number().required("Job location is required"),
-          lng: Yup.number().required("Job location is required"),
-          title: Yup.string().required("Job location is required"),
+          lat: Yup.number().required("location is required"),
+          lng: Yup.number().required("location is required"),
+          title: Yup.string().required("location is required"),
         })
         .test(
           "marker-required",
-          "Job location is required",
+          "location is required",
           (value) => value && value.lat && value.lng
         ),
       searchRadius: Yup.number()
@@ -160,6 +288,28 @@ const CreateJobPage = () => {
         .min(1, "At least 1 guard is required")
         .max(99, "You cannot acquire more than 99 security personnel")
         .required("Number of guards is required"),
+      cardName: Yup.string()
+        .matches(/^[a-zA-Z ]+$/, "Only letters allowed")
+        .min(3, "Too short")
+        .required("Cardholder name is required"),
+
+      cardNumber: Yup.string()
+        .matches(/^\d{16}$/, "Card number must be 16 digits")
+        .required("Card number is required"),
+
+      expiry: Yup.string()
+        .matches(/^(0[1-9]|1[0-2])\/\d{2}$/, "Use MM/YY format")
+        .test("expiry-valid", "Card has expired", (value) => {
+          if (!value) return false;
+          const [month, year] = value.split("/");
+          const expiryDate = new Date(`20${year}`, month);
+          return expiryDate > new Date();
+        })
+        .required("Expiry date is required"),
+
+      cvv: Yup.string()
+        .matches(/^\d{3,4}$/, "CVV must be 3 or 4 digits")
+        .required("CVV is required"),
     })
     .test("datetime-validation", "Invalid date/time selection", function (values) {
       const { startDate, startTime, endDate, endTime } = values;
@@ -261,6 +411,10 @@ const CreateJobPage = () => {
     endDate: day ? day : initialDates.endDate,
     endTime: initialDates.endTime,
     numberOfGuards: 1,
+    cardName: "",
+    cardNumber: "",
+    expiry: "",
+    cvv: "",
   };
 
   // Get user's current location
@@ -509,7 +663,7 @@ const CreateJobPage = () => {
               numberOfGuards: job.numberOfGuards,
               state: "Victoria",
               // state: job.marker.state || "",
-              job_instrcutions: job.job_instructions || "",
+              fjob_instrcutions: job.job_instructions || "",
             };
 
             console.log(`Posting job ${jobIndex + 1}/${allJobs.length}:`, payload);
@@ -871,7 +1025,14 @@ const CreateJobPage = () => {
                                           Job Amount:
                                         </MDTypography>
                                         <MDTypography variant="h5" color="info">
-                                          ${(job.numberOfGuards * 50 * 1.1).toFixed(2)}
+                                          $
+                                          {calculateJobCost(
+                                            job.startDate,
+                                            job.startTime,
+                                            job.endDate,
+                                            job.endTime,
+                                            job.numberOfGuards
+                                          ).total.toFixed(2)}
                                         </MDTypography>
                                       </MDBox>
                                     </MDBox>
@@ -881,323 +1042,318 @@ const CreateJobPage = () => {
                             </MDBox>
                           </MDBox>
                         )}
-                        <MDTypography variant="h4" fontWeight="medium" mb={3}>
-                          Job Information
-                        </MDTypography>
+                        <Card sx={{ padding: 3, backgroundColor: "#fffdf8ff" }}>
+                          <MDTypography variant="h4" fontWeight="medium" mb={3}>
+                            Job Information
+                          </MDTypography>
+                          <MDBox display="flex" flexDirection="column" gap={2}>
+                            <FormControl
+                              fullWidth
+                              variant="outlined"
+                              error={touched.type && Boolean(errors.type)}
+                            >
+                              <InputLabel id="job-type-label">Job Category</InputLabel>
+                              <Select
+                                labelId="job-type-label"
+                                label="Job Category"
+                                name="type"
+                                value={values.type}
+                                onChange={handleChange}
+                                onBlur={handleBlur}
+                                sx={{ height: "50px" }}
+                              >
+                                <MenuItem value="">
+                                  <em>Select Job Type</em>
+                                </MenuItem>
+                                <MenuItem value="Event security">Event Security</MenuItem>
+                                <MenuItem value="Residential security">
+                                  Residential Security
+                                </MenuItem>
+                                <MenuItem value="Corporate security">Corporate Security</MenuItem>
+                                <MenuItem value="Personal bodyguard">Personal Bodyguard</MenuItem>
+                                <MenuItem value="Others">Others</MenuItem>
+                              </Select>
+                              {touched.type && errors.type && (
+                                <FormHelperText>{errors.type}</FormHelperText>
+                              )}
+                            </FormControl>
 
-                        <MDBox display="flex" flexDirection="column" gap={2}>
-                          <FormControl
-                            fullWidth
-                            variant="outlined"
-                            error={touched.type && Boolean(errors.type)}
-                          >
-                            <InputLabel id="job-type-label">Job Type</InputLabel>
-                            <Select
-                              labelId="job-type-label"
-                              label="Job Type"
-                              name="type"
-                              value={values.type}
+                            <TextField
+                              fullWidth
+                              label="Job Description"
+                              name="description"
+                              value={values.description}
                               onChange={handleChange}
                               onBlur={handleBlur}
-                              sx={{ height: "50px" }}
-                            >
-                              <MenuItem value="">
-                                <em>Select Job Type</em>
-                              </MenuItem>
-                              <MenuItem value="Event security">Event Security</MenuItem>
-                              <MenuItem value="Residential security">Residential Security</MenuItem>
-                              <MenuItem value="Corporate security">Corporate Security</MenuItem>
-                              <MenuItem value="Personal bodyguard">Personal Bodyguard</MenuItem>
-                              <MenuItem value="Others">Others</MenuItem>
-                            </Select>
-                            {touched.type && errors.type && (
-                              <FormHelperText>{errors.type}</FormHelperText>
-                            )}
-                          </FormControl>
+                              placeholder="Describe the job responsibilities..."
+                              variant="outlined"
+                              multiline
+                              rows={3}
+                              error={touched.description && Boolean(errors.description)}
+                              helperText={touched.description && errors.description}
+                            />
 
-                          <TextField
-                            fullWidth
-                            label="Job Description"
-                            name="description"
-                            value={values.description}
-                            onChange={handleChange}
-                            onBlur={handleBlur}
-                            placeholder="Describe the job responsibilities..."
-                            variant="outlined"
-                            multiline
-                            rows={3}
-                            error={touched.description && Boolean(errors.description)}
-                            helperText={touched.description && errors.description}
-                          />
+                            <TextField
+                              fullWidth
+                              label="Additional Details"
+                              name="additionalDetails"
+                              value={values.additionalDetails}
+                              onChange={handleChange}
+                              onBlur={handleBlur}
+                              placeholder="Describe additional job details..."
+                              multiline
+                              rows={4}
+                              variant="outlined"
+                              error={touched.additionalDetails && Boolean(errors.additionalDetails)}
+                              helperText={touched.additionalDetails && errors.additionalDetails}
+                            />
+                            {/* Add this after the Additional Details TextField */}
+                            <MDBox>
+                              <MDTypography variant="h6" mb={1}>
+                                Job Instructions (Optional)
+                              </MDTypography>
+                              <MDTypography variant="caption" color="text" mb={2} display="block">
+                                Upload a PDF document with detailed job instructions
+                              </MDTypography>
 
-                          <TextField
-                            fullWidth
-                            label="Additional Details"
-                            name="additionalDetails"
-                            value={values.additionalDetails}
-                            onChange={handleChange}
-                            onBlur={handleBlur}
-                            placeholder="Describe additional job details..."
-                            multiline
-                            rows={4}
-                            variant="outlined"
-                            error={touched.additionalDetails && Boolean(errors.additionalDetails)}
-                            helperText={touched.additionalDetails && errors.additionalDetails}
-                          />
-                          {/* Add this after the Additional Details TextField */}
-                          <MDBox>
-                            <MDTypography variant="h6" mb={1}>
-                              Job Instructions (Optional)
-                            </MDTypography>
-                            <MDTypography variant="caption" color="text" mb={2} display="block">
-                              Upload a PDF document with detailed job instructions
-                            </MDTypography>
-
-                            <MDBox display="flex" alignItems="center" gap={2}>
-                              <input
-                                accept="application/pdf"
-                                style={{ display: "none" }}
-                                id="pdf-upload-button"
-                                type="file"
-                                onChange={(e) => handleFileUpload(e, setFieldValue)}
-                                disabled={uploadingFile}
-                                key={values.job_instructions || "empty"}
-                              />
-                              <label htmlFor="pdf-upload-button">
-                                <MDButton
-                                  variant="outlined"
-                                  color="info"
-                                  component="span"
+                              <MDBox display="flex" alignItems="center" gap={2}>
+                                <input
+                                  accept="application/pdf"
+                                  style={{ display: "none" }}
+                                  id="pdf-upload-button"
+                                  type="file"
+                                  onChange={(e) => handleFileUpload(e, setFieldValue)}
                                   disabled={uploadingFile}
-                                >
-                                  {uploadingFile
-                                    ? "Uploading..."
-                                    : values.job_instructions
-                                    ? "Change PDF"
-                                    : "Upload PDF"}
-                                </MDButton>
-                              </label>
-
-                              {values.job_instructions && (
-                                <>
-                                  <MDTypography variant="caption" color="success">
-                                    ✓ File uploaded successfully
-                                  </MDTypography>
+                                  key={values.job_instructions || "empty"}
+                                />
+                                <label htmlFor="pdf-upload-button">
                                   <MDButton
-                                    variant="text"
-                                    color="error"
-                                    size="small"
-                                    onClick={() => setFieldValue("job_instructions", "")}
+                                    variant="outlined"
+                                    color="info"
+                                    component="span"
+                                    disabled={uploadingFile}
                                   >
-                                    Remove
+                                    {uploadingFile
+                                      ? "Uploading..."
+                                      : values.job_instructions
+                                      ? "Change PDF"
+                                      : "Upload PDF"}
                                   </MDButton>
-                                </>
-                              )}
+                                </label>
+
+                                {values.job_instructions && (
+                                  <>
+                                    <MDTypography variant="caption" color="success">
+                                      ✓ File uploaded successfully
+                                    </MDTypography>
+                                    <MDButton
+                                      variant="text"
+                                      color="error"
+                                      size="small"
+                                      onClick={() => setFieldValue("job_instructions", "")}
+                                    >
+                                      Remove
+                                    </MDButton>
+                                  </>
+                                )}
+                              </MDBox>
                             </MDBox>
                           </MDBox>
-                        </MDBox>
-                        <MDBox
-                          sx={{
-                            width: "50%",
-                            height: "1px",
-                            backgroundColor: "#a5a5a5ff",
-                            my: 8,
-                            marginLeft: "25%",
-                          }}
-                        />
-                        <MDBox mt={4}>
-                          <Grid container spacing={3} alignItems="flex-start">
-                            {/* LEFT COLUMN */}
-                            <Grid item xs={12} md={4}>
-                              <Grid container spacing={3} display="flex" flexDirection="column">
-                                <Grid item xs={12} md={12}>
-                                  <MDTypography variant="h6" mb={2}>
-                                    Job Start
-                                  </MDTypography>
-                                  <Grid container spacing={2}>
-                                    <Grid item xs={12} sm={6}>
-                                      <TextField
-                                        fullWidth
-                                        label="Start Date"
-                                        name="startDate"
-                                        type="date"
-                                        value={values.startDate}
-                                        onChange={handleChange}
-                                        onBlur={handleBlur}
-                                        InputLabelProps={{ shrink: true }}
-                                        variant="outlined"
-                                        error={touched.startDate && Boolean(errors.startDate)}
-                                        helperText={touched.startDate && errors.startDate}
-                                        inputProps={{
-                                          min: new Date().toISOString().split("T")[0],
-                                        }}
-                                      />
+                        </Card>
+                        <MDBox mt={5}>
+                          <Card sx={{ padding: 3, backgroundColor: "#fffdf8ff" }}>
+                            <Grid container spacing={3} alignItems="flex-start">
+                              {/* LEFT COLUMN */}
+                              <Grid item xs={12} md={4}>
+                                <Grid container spacing={3} display="flex" flexDirection="column">
+                                  <Grid item xs={12} md={12}>
+                                    <MDTypography variant="h6" mb={2}>
+                                      Start Time
+                                    </MDTypography>
+                                    <Grid container spacing={2}>
+                                      <Grid item xs={12} sm={6}>
+                                        <TextField
+                                          fullWidth
+                                          label="Start Date"
+                                          name="startDate"
+                                          type="date"
+                                          value={values.startDate}
+                                          onChange={handleChange}
+                                          onBlur={handleBlur}
+                                          InputLabelProps={{ shrink: true }}
+                                          variant="outlined"
+                                          error={touched.startDate && Boolean(errors.startDate)}
+                                          helperText={touched.startDate && errors.startDate}
+                                          inputProps={{
+                                            min: new Date().toISOString().split("T")[0],
+                                          }}
+                                        />
+                                      </Grid>
+                                      <Grid item xs={12} sm={6}>
+                                        <TextField
+                                          fullWidth
+                                          label="Start Time"
+                                          name="startTime"
+                                          type="time"
+                                          value={values.startTime}
+                                          onChange={handleChange}
+                                          onBlur={handleBlur}
+                                          InputLabelProps={{ shrink: true }}
+                                          variant="outlined"
+                                          error={touched.startTime && Boolean(errors.startTime)}
+                                          helperText={touched.startTime && errors.startTime}
+                                        />
+                                      </Grid>
                                     </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                      <TextField
-                                        fullWidth
-                                        label="Start Time"
-                                        name="startTime"
-                                        type="time"
-                                        value={values.startTime}
-                                        onChange={handleChange}
-                                        onBlur={handleBlur}
-                                        InputLabelProps={{ shrink: true }}
-                                        variant="outlined"
-                                        error={touched.startTime && Boolean(errors.startTime)}
-                                        helperText={touched.startTime && errors.startTime}
-                                      />
+                                  </Grid>
+                                  <Grid item xs={12} md={12}>
+                                    <MDTypography variant="h6" mb={2}>
+                                      End Time
+                                    </MDTypography>
+                                    <Grid container spacing={2}>
+                                      <Grid item xs={12} sm={6}>
+                                        <TextField
+                                          fullWidth
+                                          label="End Date"
+                                          name="endDate"
+                                          type="date"
+                                          value={values.endDate}
+                                          onChange={(e) => {
+                                            handleChange(e);
+                                            setTimeout(() => validateForm(), 100);
+                                          }}
+                                          onBlur={handleBlur}
+                                          InputLabelProps={{ shrink: true }}
+                                          variant="outlined"
+                                          error={touched.endDate && Boolean(errors.endDate)}
+                                          helperText={touched.endDate && errors.endDate}
+                                          inputProps={{
+                                            min: new Date().toISOString().split("T")[0],
+                                          }}
+                                        />
+                                      </Grid>
+                                      <Grid item xs={12} sm={6}>
+                                        <TextField
+                                          fullWidth
+                                          label="End Time"
+                                          name="endTime"
+                                          type="time"
+                                          value={values.endTime}
+                                          onChange={(e) => {
+                                            handleChange(e);
+                                            setTimeout(() => validateForm(), 100);
+                                          }}
+                                          onBlur={handleBlur}
+                                          InputLabelProps={{ shrink: true }}
+                                          variant="outlined"
+                                          error={touched.endTime && Boolean(errors.endTime)}
+                                          helperText={touched.endTime && errors.endTime}
+                                        />
+                                      </Grid>
                                     </Grid>
                                   </Grid>
                                 </Grid>
-                                <Grid item xs={12} md={12}>
+                                <MDBox mt={3}>
                                   <MDTypography variant="h6" mb={2}>
-                                    Job End
+                                    Number of Guards
                                   </MDTypography>
-                                  <Grid container spacing={2}>
-                                    <Grid item xs={12} sm={6}>
-                                      <TextField
-                                        fullWidth
-                                        label="End Date"
-                                        name="endDate"
-                                        type="date"
-                                        value={values.endDate}
-                                        onChange={(e) => {
-                                          handleChange(e);
-                                          setTimeout(() => validateForm(), 100);
-                                        }}
-                                        onBlur={handleBlur}
-                                        InputLabelProps={{ shrink: true }}
-                                        variant="outlined"
-                                        error={touched.endDate && Boolean(errors.endDate)}
-                                        helperText={touched.endDate && errors.endDate}
-                                        inputProps={{
-                                          min: new Date().toISOString().split("T")[0],
-                                        }}
-                                      />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                      <TextField
-                                        fullWidth
-                                        label="End Time"
-                                        name="endTime"
-                                        type="time"
-                                        value={values.endTime}
-                                        onChange={(e) => {
-                                          handleChange(e);
-                                          setTimeout(() => validateForm(), 100);
-                                        }}
-                                        onBlur={handleBlur}
-                                        InputLabelProps={{ shrink: true }}
-                                        variant="outlined"
-                                        error={touched.endTime && Boolean(errors.endTime)}
-                                        helperText={touched.endTime && errors.endTime}
-                                      />
-                                    </Grid>
-                                  </Grid>
-                                </Grid>
-                              </Grid>
-                              <MDBox mt={3}>
-                                <MDTypography variant="h6" mb={2}>
-                                  Number of Guards
-                                </MDTypography>
-                                <MDBox
-                                  display="flex"
-                                  gap={2}
-                                  // alignItems="center"
-                                  flexDirection="column"
-                                >
-                                  {/* Number of Guards Input */}
+                                  <MDBox
+                                    display="flex"
+                                    gap={2}
+                                    // alignItems="center"
+                                    flexDirection="column"
+                                  >
+                                    {/* Number of Guards Input */}
 
-                                  <TextField
-                                    type="number"
-                                    label="Guards"
-                                    value={values.numberOfGuards}
-                                    onChange={(e) =>
-                                      setFieldValue(
-                                        "numberOfGuards",
-                                        Math.max(1, Number(e.target.value) || 1)
-                                      )
-                                    }
-                                    inputProps={{
-                                      min: 1,
-                                      style: { textAlign: "center" },
-                                    }}
-                                    sx={{
-                                      width: 120,
-                                      "& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button":
-                                        {
-                                          WebkitAppearance: "none",
-                                          margin: 0,
+                                    <TextField
+                                      type="number"
+                                      label="Guards"
+                                      value={values.numberOfGuards}
+                                      onChange={(e) =>
+                                        setFieldValue(
+                                          "numberOfGuards",
+                                          Math.max(1, Number(e.target.value) || 1)
+                                        )
+                                      }
+                                      inputProps={{
+                                        min: 1,
+                                        style: { textAlign: "center" },
+                                      }}
+                                      sx={{
+                                        width: 120,
+                                        "& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button":
+                                          {
+                                            WebkitAppearance: "none",
+                                            margin: 0,
+                                          },
+                                        "& input[type=number]": {
+                                          MozAppearance: "textfield",
                                         },
-                                      "& input[type=number]": {
-                                        MozAppearance: "textfield",
-                                      },
-                                    }}
-                                  />
+                                      }}
+                                    />
 
-                                  {/* Total Hours */}
-                                  <MDTypography variant="h6" color="text">
-                                    Total hours:{" "}
-                                    {calculateShiftHours(
-                                      values.startDate,
-                                      values.startTime,
-                                      values.endDate,
-                                      values.endTime
-                                    ).toFixed(2)}
-                                  </MDTypography>
+                                    {/* Total Hours */}
+                                    <MDTypography variant="h6" color="text">
+                                      Total hours:{" "}
+                                      {calculateShiftHours(
+                                        values.startDate,
+                                        values.startTime,
+                                        values.endDate,
+                                        values.endTime
+                                      ).toFixed(2)}
+                                    </MDTypography>
+                                  </MDBox>
+
+                                  {calculateShiftHours(
+                                    values.startDate,
+                                    values.startTime,
+                                    values.endDate,
+                                    values.endTime
+                                  ) < 1 && (
+                                    <MDTypography variant="caption" color="error" mt={1}>
+                                      End time cannot be earlier than Start time
+                                    </MDTypography>
+                                  )}
+
+                                  {touched.numberOfGuards && errors.numberOfGuards && (
+                                    <MDTypography variant="caption" color="error" mt={1}>
+                                      {errors.numberOfGuards}
+                                    </MDTypography>
+                                  )}
                                 </MDBox>
 
-                                {calculateShiftHours(
-                                  values.startDate,
-                                  values.startTime,
-                                  values.endDate,
-                                  values.endTime
-                                ) < 1 && (
-                                  <MDTypography variant="caption" color="error" mt={1}>
-                                    End time cannot be earlier than Start time
+                                {/* Validation BELOW title */}
+                                {touched.marker && errors.marker && (
+                                  <MDTypography variant="caption" color="error">
+                                    {typeof errors.marker === "string"
+                                      ? errors.marker
+                                      : "location is required"}
                                   </MDTypography>
                                 )}
+                              </Grid>
 
-                                {touched.numberOfGuards && errors.numberOfGuards && (
-                                  <MDTypography variant="caption" color="error" mt={1}>
-                                    {errors.numberOfGuards}
-                                  </MDTypography>
-                                )}
-                              </MDBox>
-
-                              {/* Validation BELOW title */}
-                              {touched.marker && errors.marker && (
-                                <MDTypography variant="caption" color="error">
-                                  {typeof errors.marker === "string"
-                                    ? errors.marker
-                                    : "Job location is required"}
-                                </MDTypography>
-                              )}
+                              {/* RIGHT COLUMN */}
+                              <Grid item xs={12} md={8}>
+                                <MDBox
+                                  sx={{
+                                    height: 400,
+                                    borderRadius: 2,
+                                    overflow: "hidden",
+                                    border:
+                                      touched.marker && errors.marker
+                                        ? "2px solid #f44336"
+                                        : "1px solid #ffffffff",
+                                  }}
+                                >
+                                  <SelectJobLocation
+                                    marker={values.marker}
+                                    setMarker={(marker) => setFieldValue("marker", marker)}
+                                  />
+                                </MDBox>
+                              </Grid>
                             </Grid>
-
-                            {/* RIGHT COLUMN */}
-                            <Grid item xs={12} md={8}>
-                              <MDBox
-                                sx={{
-                                  height: 400,
-                                  borderRadius: 2,
-                                  overflow: "hidden",
-                                  border:
-                                    touched.marker && errors.marker
-                                      ? "2px solid #f44336"
-                                      : "1px solid #ffffffff",
-                                }}
-                              >
-                                <SelectJobLocation
-                                  marker={values.marker}
-                                  setMarker={(marker) => setFieldValue("marker", marker)}
-                                />
-                              </MDBox>
-                            </Grid>
-                          </Grid>
+                          </Card>
                         </MDBox>
-
                         {/* <MDBox mt={3}>
                           <MDTypography variant="h6" mb={1}>
                             Search Area for Available Guards
@@ -1251,33 +1407,229 @@ const CreateJobPage = () => {
                         <MDTypography variant="h4" fontWeight="medium" mb={3}>
                           Review & Confirm
                         </MDTypography>
-
                         {/* All Jobs - Unified Detailed Display */}
-                        <MDBox display="flex" flexDirection="column" gap={3} mb={4}>
-                          {/* Queued Jobs */}
-                          {jobsQueue.map((job, index) => (
-                            <Card
-                              key={index}
-                              sx={{
-                                background: "linear-gradient(to right, #E3F2FD, #C5CAE9)",
-                              }}
-                            >
-                              <MDBox p={3}>
-                                <MDBox
-                                  display="flex"
-                                  justifyContent="space-between"
-                                  alignItems="center"
-                                  mb={2}
+                        <Grid container spacing={3}>
+                          {/* ================= LEFT COLUMN ================= */}
+                          <Grid item xs={12} md={8}>
+                            <MDBox display="flex" flexDirection="column" gap={3} mb={4}>
+                              {/* Queued Jobs */}
+                              {jobsQueue.map((job, index) => (
+                                <Card
+                                  key={index}
+                                  sx={{
+                                    background: "linear-gradient(to right, #E3F2FD, #C5CAE9)",
+                                  }}
                                 >
-                                  <MDTypography variant="h6" fontWeight="medium">
-                                    Job {index + 1} - {job.type}
-                                  </MDTypography>
-                                  <MDBox display="flex" gap={1}>
+                                  <MDBox p={3}>
+                                    <MDBox
+                                      display="flex"
+                                      justifyContent="space-between"
+                                      alignItems="center"
+                                      mb={2}
+                                    >
+                                      <MDTypography variant="h6" fontWeight="medium">
+                                        Job {index + 1} - {job.type}
+                                      </MDTypography>
+                                      <MDBox display="flex" gap={1}>
+                                        <IconButton
+                                          onClick={() => {
+                                            handleEditJob(index, setFieldValue);
+                                            setActiveStep(0);
+                                          }}
+                                          size="small"
+                                          sx={{
+                                            color: "grey.600",
+                                            "&:hover": { color: "info.main" },
+                                          }}
+                                        >
+                                          <Edit2 size={18} strokeWidth={1.8} />
+                                        </IconButton>
+                                        <IconButton
+                                          onClick={() => handleDeleteJob(index)}
+                                          size="small"
+                                          sx={{
+                                            color: "grey.600",
+                                            "&:hover": { color: "error.main" },
+                                          }}
+                                        >
+                                          <Trash2 size={18} strokeWidth={1.8} />
+                                        </IconButton>
+                                      </MDBox>
+                                    </MDBox>
+
+                                    <MDBox display="flex" flexDirection="column" gap={2}>
+                                      <MDBox display="flex" justifyContent="space-between">
+                                        <MDTypography variant="body2" color="text">
+                                          Job Title:
+                                        </MDTypography>
+                                        <MDTypography variant="body2" fontWeight="medium">
+                                          {job.type}
+                                        </MDTypography>
+                                      </MDBox>
+                                      <MDBox display="flex" justifyContent="space-between">
+                                        <MDTypography variant="body2" color="text">
+                                          Number of Guards:
+                                        </MDTypography>
+                                        <MDTypography variant="body2" fontWeight="medium">
+                                          {job.numberOfGuards}
+                                        </MDTypography>
+                                      </MDBox>
+                                      <MDBox display="flex" justifyContent="space-between">
+                                        <MDTypography variant="body2" color="text">
+                                          Start Date & Time:
+                                        </MDTypography>
+                                        <MDTypography variant="body2" fontWeight="medium">
+                                          {formatDateTime(job.startDate, job.startTime)}
+                                        </MDTypography>
+                                      </MDBox>
+                                      <MDBox display="flex" justifyContent="space-between">
+                                        <MDTypography variant="body2" color="text">
+                                          End Date & Time:
+                                        </MDTypography>
+                                        <MDTypography variant="body2" fontWeight="medium">
+                                          {formatDateTime(job.endDate, job.endTime)}
+                                        </MDTypography>
+                                      </MDBox>
+                                      <MDBox display="flex" justifyContent="space-between">
+                                        <MDTypography variant="body2" color="text">
+                                          Location:
+                                        </MDTypography>
+                                        <MDTypography variant="body2" fontWeight="medium">
+                                          {job.marker.title} (Radius: {job.searchRadius} miles)
+                                        </MDTypography>
+                                      </MDBox>
+                                      <MDBox
+                                        display="flex"
+                                        justifyContent="space-between"
+                                        alignItems="flex-start"
+                                      >
+                                        <MDTypography variant="body2" color="text">
+                                          Description:
+                                        </MDTypography>
+                                        <MDTypography
+                                          variant="body2"
+                                          fontWeight="medium"
+                                          sx={{ maxWidth: "70%", textAlign: "right" }}
+                                        >
+                                          {job.description || "No description provided"}
+                                        </MDTypography>
+                                      </MDBox>
+
+                                      {/* Cost Breakdown */}
+                                      <MDBox
+                                        mt={2}
+                                        pt={2}
+                                        sx={{ borderTop: "1px solid", borderColor: "grey.300" }}
+                                      >
+                                        <MDTypography
+                                          variant="body2"
+                                          fontWeight="medium"
+                                          color="text"
+                                          mb={1}
+                                        >
+                                          Rate Breakdown:
+                                        </MDTypography>
+                                        {calculateJobCost(
+                                          values.startDate,
+                                          values.startTime,
+                                          values.endDate,
+                                          values.endTime,
+                                          values.numberOfGuards
+                                        ).breakdown.map((item, idx) => (
+                                          <MDBox
+                                            key={idx}
+                                            display="flex"
+                                            justifyContent="space-between"
+                                            mb={0.5}
+                                          >
+                                            <MDTypography variant="caption" color="text">
+                                              {item.type}: {item.hours.toFixed(2)}h × ${item.rate}/h
+                                              × {values.numberOfGuards} guard
+                                              {values.numberOfGuards > 1 ? "s" : ""}
+                                            </MDTypography>
+                                            <MDTypography variant="caption" fontWeight="medium">
+                                              ${item.cost.toFixed(2)}
+                                            </MDTypography>
+                                          </MDBox>
+                                        ))}
+                                        <MDBox display="flex" justifyContent="space-between" mt={1}>
+                                          <MDTypography variant="caption" color="text">
+                                            Subtotal:
+                                          </MDTypography>
+                                          <MDTypography variant="caption" fontWeight="medium">
+                                            $
+                                            {calculateJobCost(
+                                              values.startDate,
+                                              values.startTime,
+                                              values.endDate,
+                                              values.endTime,
+                                              values.numberOfGuards
+                                            ).subtotal.toFixed(2)}
+                                          </MDTypography>
+                                        </MDBox>
+                                      </MDBox>
+
+                                      <MDBox display="flex" justifyContent="space-between">
+                                        <MDTypography variant="body2" color="text">
+                                          GST (10%):
+                                        </MDTypography>
+                                        <MDTypography variant="body2" fontWeight="medium">
+                                          $
+                                          {calculateJobCost(
+                                            values.startDate,
+                                            values.startTime,
+                                            values.endDate,
+                                            values.endTime,
+                                            values.numberOfGuards
+                                          ).gst.toFixed(2)}
+                                        </MDTypography>
+                                      </MDBox>
+
+                                      <MDBox
+                                        display="flex"
+                                        justifyContent="space-between"
+                                        pt={2}
+                                        sx={{ borderTop: "1px solid", borderColor: "grey.400" }}
+                                      >
+                                        <MDTypography variant="h6" color="text">
+                                          Job Amount:
+                                        </MDTypography>
+                                        <MDTypography variant="h5" color="info">
+                                          $
+                                          {calculateJobCost(
+                                            values.startDate,
+                                            values.startTime,
+                                            values.endDate,
+                                            values.endTime,
+                                            values.numberOfGuards
+                                          ).total.toFixed(2)}
+                                        </MDTypography>
+                                      </MDBox>
+                                    </MDBox>
+                                  </MDBox>
+                                </Card>
+                              ))}
+
+                              {/* Current Job Being Added */}
+                              <Card
+                                sx={{
+                                  background: "linear-gradient(to right, #E3F2FD, #C5CAE9)",
+                                  border: "2px dashed",
+                                  borderColor: "info.main",
+                                }}
+                              >
+                                <MDBox p={3}>
+                                  <MDBox
+                                    display="flex"
+                                    justifyContent="space-between"
+                                    alignItems="center"
+                                    mb={2}
+                                  >
+                                    <MDTypography variant="h6" fontWeight="medium" color="info">
+                                      Current Job (Being Added)
+                                    </MDTypography>
                                     <IconButton
-                                      onClick={() => {
-                                        handleEditJob(index, setFieldValue);
-                                        setActiveStep(0);
-                                      }}
+                                      onClick={() => setActiveStep(0)}
                                       size="small"
                                       sx={{
                                         color: "grey.600",
@@ -1286,267 +1638,218 @@ const CreateJobPage = () => {
                                     >
                                       <Edit2 size={18} strokeWidth={1.8} />
                                     </IconButton>
-                                    <IconButton
-                                      onClick={() => handleDeleteJob(index)}
-                                      size="small"
+                                  </MDBox>
+
+                                  <MDBox display="flex" flexDirection="column" gap={2}>
+                                    <MDBox display="flex" justifyContent="space-between">
+                                      <MDTypography variant="body2" color="text">
+                                        Job Title:
+                                      </MDTypography>
+                                      <MDTypography variant="body2" fontWeight="medium">
+                                        {values.type || "N/A"}
+                                      </MDTypography>
+                                    </MDBox>
+
+                                    <MDBox display="flex" justifyContent="space-between">
+                                      <MDTypography variant="body2" color="text">
+                                        Number of Guards:
+                                      </MDTypography>
+                                      <MDTypography variant="body2" fontWeight="medium">
+                                        {values.numberOfGuards || "N/A"}
+                                      </MDTypography>
+                                    </MDBox>
+
+                                    <MDBox display="flex" justifyContent="space-between">
+                                      <MDTypography variant="body2" color="text">
+                                        Start Date & Time:
+                                      </MDTypography>
+                                      <MDTypography variant="body2" fontWeight="medium">
+                                        {formatDateTime(values.startDate, values.startTime)}
+                                      </MDTypography>
+                                    </MDBox>
+
+                                    <MDBox display="flex" justifyContent="space-between">
+                                      <MDTypography variant="body2" color="text">
+                                        End Date & Time:
+                                      </MDTypography>
+                                      <MDTypography variant="body2" fontWeight="medium">
+                                        {formatDateTime(values.endDate, values.endTime)}
+                                      </MDTypography>
+                                    </MDBox>
+
+                                    <MDBox display="flex" justifyContent="space-between">
+                                      <MDTypography variant="body2" color="text">
+                                        Location:
+                                      </MDTypography>
+                                      <MDTypography variant="body2" fontWeight="medium">
+                                        {values.marker?.title || "N/A"} (Radius:{" "}
+                                        {values.searchRadius} miles)
+                                      </MDTypography>
+                                    </MDBox>
+
+                                    <MDBox
+                                      display="flex"
+                                      justifyContent="space-between"
+                                      alignItems="flex-start"
+                                    >
+                                      <MDTypography variant="body2" color="text">
+                                        Description:
+                                      </MDTypography>
+                                      <MDTypography
+                                        variant="body2"
+                                        fontWeight="medium"
+                                        sx={{ maxWidth: "70%", textAlign: "right" }}
+                                      >
+                                        {values.description || "No description provided"}
+                                      </MDTypography>
+                                    </MDBox>
+
+                                    <MDBox display="flex" justifyContent="space-between">
+                                      <MDTypography variant="body2" color="text">
+                                        GST:
+                                      </MDTypography>
+                                      <MDTypography variant="body2" fontWeight="medium">
+                                        10%
+                                      </MDTypography>
+                                    </MDBox>
+
+                                    <MDBox
+                                      display="flex"
+                                      justifyContent="space-between"
+                                      pt={2}
                                       sx={{
-                                        color: "grey.600",
-                                        "&:hover": { color: "error.main" },
+                                        borderTop: "1px solid",
+                                        borderColor: "grey.400",
                                       }}
                                     >
-                                      <Trash2 size={18} strokeWidth={1.8} />
-                                    </IconButton>
+                                      <MDTypography variant="h6" color="text">
+                                        Job Amount:
+                                      </MDTypography>
+                                      <MDTypography variant="h5" color="info">
+                                        $
+                                        {calculateJobCost(
+                                          values.startDate,
+                                          values.startTime,
+                                          values.endDate,
+                                          values.endTime,
+                                          values.numberOfGuards
+                                        ).total.toFixed(2)}
+                                      </MDTypography>
+                                    </MDBox>
                                   </MDBox>
                                 </MDBox>
+                              </Card>
+                            </MDBox>
 
-                                <MDBox display="flex" flexDirection="column" gap={2}>
-                                  <MDBox display="flex" justifyContent="space-between">
-                                    <MDTypography variant="body2" color="text">
-                                      Job Title:
-                                    </MDTypography>
-                                    <MDTypography variant="body2" fontWeight="medium">
-                                      {job.type}
-                                    </MDTypography>
-                                  </MDBox>
-
-                                  <MDBox display="flex" justifyContent="space-between">
-                                    <MDTypography variant="body2" color="text">
-                                      Number of Guards:
-                                    </MDTypography>
-                                    <MDTypography variant="body2" fontWeight="medium">
-                                      {job.numberOfGuards}
-                                    </MDTypography>
-                                  </MDBox>
-
-                                  <MDBox display="flex" justifyContent="space-between">
-                                    <MDTypography variant="body2" color="text">
-                                      Start Date & Time:
-                                    </MDTypography>
-                                    <MDTypography variant="body2" fontWeight="medium">
-                                      {formatDateTime(job.startDate, job.startTime)}
-                                    </MDTypography>
-                                  </MDBox>
-
-                                  <MDBox display="flex" justifyContent="space-between">
-                                    <MDTypography variant="body2" color="text">
-                                      End Date & Time:
-                                    </MDTypography>
-                                    <MDTypography variant="body2" fontWeight="medium">
-                                      {formatDateTime(job.endDate, job.endTime)}
-                                    </MDTypography>
-                                  </MDBox>
-
-                                  <MDBox display="flex" justifyContent="space-between">
-                                    <MDTypography variant="body2" color="text">
-                                      Location:
-                                    </MDTypography>
-                                    <MDTypography variant="body2" fontWeight="medium">
-                                      {job.marker.title} (Radius: {job.searchRadius} miles)
-                                    </MDTypography>
-                                  </MDBox>
-
-                                  <MDBox
-                                    display="flex"
-                                    justifyContent="space-between"
-                                    alignItems="flex-start"
-                                  >
-                                    <MDTypography variant="body2" color="text">
-                                      Description:
-                                    </MDTypography>
-                                    <MDTypography
-                                      variant="body2"
-                                      fontWeight="medium"
-                                      sx={{ maxWidth: "70%", textAlign: "right" }}
-                                    >
-                                      {job.description || "No description provided"}
-                                    </MDTypography>
-                                  </MDBox>
-
-                                  <MDBox display="flex" justifyContent="space-between">
-                                    <MDTypography variant="body2" color="text">
-                                      GST:
-                                    </MDTypography>
-                                    <MDTypography variant="body2" fontWeight="medium">
-                                      10%
-                                    </MDTypography>
-                                  </MDBox>
-
-                                  <MDBox
-                                    display="flex"
-                                    justifyContent="space-between"
-                                    pt={2}
-                                    sx={{
-                                      borderTop: "1px solid",
-                                      borderColor: "grey.400",
-                                    }}
-                                  >
-                                    <MDTypography variant="h6" color="text">
-                                      Job Amount:
-                                    </MDTypography>
-                                    <MDTypography variant="h5" color="info">
-                                      ${(job.numberOfGuards * 50 * 1.1).toFixed(2)}
-                                    </MDTypography>
-                                  </MDBox>
+                            <Card
+                              sx={{
+                                backgroundColor: "success.light",
+                                border: "1px solid",
+                                borderColor: "success.main",
+                                mb: 3,
+                              }}
+                            >
+                              <MDBox p={3}>
+                                <MDBox
+                                  display="flex"
+                                  justifyContent="space-between"
+                                  alignItems="center"
+                                >
+                                  <MDTypography variant="h5" fontWeight="medium">
+                                    Total Amount ({jobsQueue.length + 1} Job
+                                    {jobsQueue.length + 1 !== 1 ? "s" : ""})
+                                  </MDTypography>
+                                  <MDTypography variant="h3" color="success" fontWeight="bold">
+                                    $
+                                    {[
+                                      ...jobsQueue,
+                                      {
+                                        startDate: values.startDate,
+                                        startTime: values.startTime,
+                                        endDate: values.endDate,
+                                        endTime: values.endTime,
+                                        numberOfGuards: values.numberOfGuards || 1,
+                                      },
+                                    ]
+                                      .reduce(
+                                        (sum, job) =>
+                                          sum +
+                                          calculateJobCost(
+                                            job.startDate,
+                                            job.startTime,
+                                            job.endDate,
+                                            job.endTime,
+                                            job.numberOfGuards || 1
+                                          ).total,
+                                        0
+                                      )
+                                      .toFixed(2)}
+                                  </MDTypography>
                                 </MDBox>
                               </MDBox>
                             </Card>
-                          ))}
+                          </Grid>
 
-                          {/* Current Job Being Added */}
-                          <Card
-                            sx={{
-                              background: "linear-gradient(to right, #E3F2FD, #C5CAE9)",
-                              border: "2px dashed",
-                              borderColor: "info.main",
-                            }}
-                          >
-                            <MDBox p={3}>
-                              <MDBox
-                                display="flex"
-                                justifyContent="space-between"
-                                alignItems="center"
-                                mb={2}
-                              >
-                                <MDTypography variant="h6" fontWeight="medium" color="info">
-                                  Current Job (Being Added)
-                                </MDTypography>
-                                <IconButton
-                                  onClick={() => setActiveStep(0)}
-                                  size="small"
-                                  sx={{
-                                    color: "grey.600",
-                                    "&:hover": { color: "info.main" },
-                                  }}
-                                >
-                                  <Edit2 size={18} strokeWidth={1.8} />
-                                </IconButton>
-                              </MDBox>
-
-                              <MDBox display="flex" flexDirection="column" gap={2}>
-                                <MDBox display="flex" justifyContent="space-between">
-                                  <MDTypography variant="body2" color="text">
-                                    Job Title:
-                                  </MDTypography>
-                                  <MDTypography variant="body2" fontWeight="medium">
-                                    {values.type || "N/A"}
-                                  </MDTypography>
-                                </MDBox>
-
-                                <MDBox display="flex" justifyContent="space-between">
-                                  <MDTypography variant="body2" color="text">
-                                    Number of Guards:
-                                  </MDTypography>
-                                  <MDTypography variant="body2" fontWeight="medium">
-                                    {values.numberOfGuards || "N/A"}
-                                  </MDTypography>
-                                </MDBox>
-
-                                <MDBox display="flex" justifyContent="space-between">
-                                  <MDTypography variant="body2" color="text">
-                                    Start Date & Time:
-                                  </MDTypography>
-                                  <MDTypography variant="body2" fontWeight="medium">
-                                    {formatDateTime(values.startDate, values.startTime)}
-                                  </MDTypography>
-                                </MDBox>
-
-                                <MDBox display="flex" justifyContent="space-between">
-                                  <MDTypography variant="body2" color="text">
-                                    End Date & Time:
-                                  </MDTypography>
-                                  <MDTypography variant="body2" fontWeight="medium">
-                                    {formatDateTime(values.endDate, values.endTime)}
-                                  </MDTypography>
-                                </MDBox>
-
-                                <MDBox display="flex" justifyContent="space-between">
-                                  <MDTypography variant="body2" color="text">
-                                    Location:
-                                  </MDTypography>
-                                  <MDTypography variant="body2" fontWeight="medium">
-                                    {values.marker?.title || "N/A"} (Radius: {values.searchRadius}{" "}
-                                    miles)
-                                  </MDTypography>
-                                </MDBox>
-
-                                <MDBox
-                                  display="flex"
-                                  justifyContent="space-between"
-                                  alignItems="flex-start"
-                                >
-                                  <MDTypography variant="body2" color="text">
-                                    Description:
-                                  </MDTypography>
-                                  <MDTypography
-                                    variant="body2"
-                                    fontWeight="medium"
-                                    sx={{ maxWidth: "70%", textAlign: "right" }}
-                                  >
-                                    {values.description || "No description provided"}
-                                  </MDTypography>
-                                </MDBox>
-
-                                <MDBox display="flex" justifyContent="space-between">
-                                  <MDTypography variant="body2" color="text">
-                                    GST:
-                                  </MDTypography>
-                                  <MDTypography variant="body2" fontWeight="medium">
-                                    10%
-                                  </MDTypography>
-                                </MDBox>
-
-                                <MDBox
-                                  display="flex"
-                                  justifyContent="space-between"
-                                  pt={2}
-                                  sx={{
-                                    borderTop: "1px solid",
-                                    borderColor: "grey.400",
-                                  }}
-                                >
-                                  <MDTypography variant="h6" color="text">
-                                    Job Amount:
-                                  </MDTypography>
-                                  <MDTypography variant="h5" color="info">
-                                    ${(values.numberOfGuards * 50 * 1.1).toFixed(2) || "0.00"}
-                                  </MDTypography>
-                                </MDBox>
-                              </MDBox>
-                            </MDBox>
-                          </Card>
-                        </MDBox>
-
-                        {/* Total Amount */}
-                        <Card
-                          sx={{
-                            backgroundColor: "success.light",
-                            border: "1px solid",
-                            borderColor: "success.main",
-                            mb: 3,
-                          }}
-                        >
-                          <MDBox p={3}>
-                            <MDBox
-                              display="flex"
-                              justifyContent="space-between"
-                              alignItems="center"
+                          {/* RIGHT SIDE — PAYMENT DETAILS */}
+                          <Grid item xs={12} md={4}>
+                            <Card
+                              sx={{
+                                backgroundColor: "background.paper",
+                                border: "1px solid",
+                                borderColor: "grey.300",
+                                position: "sticky",
+                                top: 100,
+                              }}
                             >
-                              <MDTypography variant="h5" fontWeight="medium">
-                                Total Amount ({jobsQueue.length + 1} Job
-                                {jobsQueue.length + 1 !== 1 ? "s" : ""})
-                              </MDTypography>
-                              <MDTypography variant="h3" color="success" fontWeight="bold">
-                                $
-                                {[...jobsQueue, { numberOfGuards: values.numberOfGuards || 1 }]
-                                  .reduce(
-                                    (sum, job) => sum + (job.numberOfGuards || 1) * 50 * 1.1,
-                                    0
-                                  )
-                                  .toFixed(2)}
-                              </MDTypography>
-                            </MDBox>
-                          </MDBox>
-                        </Card>
+                              <MDBox p={3}>
+                                <MDTypography variant="h5" fontWeight="medium" mb={2}>
+                                  Payment Details
+                                </MDTypography>
+
+                                <MDBox display="flex" flexDirection="column" gap={3}>
+                                  <TextField
+                                    label="Cardholder Name"
+                                    fullWidth
+                                    placeholder="John Doe"
+                                  />
+
+                                  <TextField
+                                    label="Card Number"
+                                    fullWidth
+                                    placeholder="1234 5678 9012 3456"
+                                    inputProps={{ maxLength: 19 }}
+                                  />
+
+                                  <MDBox display="flex" gap={2}>
+                                    <TextField
+                                      label="Expiry Date"
+                                      placeholder="MM/YY"
+                                      fullWidth
+                                      inputProps={{ maxLength: 5 }}
+                                    />
+
+                                    <TextField
+                                      label="CVV"
+                                      placeholder="123"
+                                      fullWidth
+                                      type="password"
+                                      inputProps={{ maxLength: 4 }}
+                                    />
+                                  </MDBox>
+
+                                  <MDTypography variant="caption" color="text">
+                                    Your payment is secure and encrypted. Funds are held in escrow
+                                    until the job is completed.
+                                  </MDTypography>
+
+                                  <MDButton color="info" fullWidth size="large">
+                                    Pay Now
+                                  </MDButton>
+                                </MDBox>
+                              </MDBox>
+                            </Card>
+                          </Grid>
+                        </Grid>
 
                         {/* Terms and Conditions */}
                         <MDBox mb={3}>
