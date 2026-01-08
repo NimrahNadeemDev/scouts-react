@@ -996,6 +996,15 @@ const CreateJobPage = () => {
                             </MDBox>
                           </MDBox>
                         </MDBox>
+                        <MDBox
+                          sx={{
+                            width: "50%",
+                            height: "1px",
+                            backgroundColor: "#a5a5a5ff",
+                            my: 8,
+                            marginLeft: "25%",
+                          }}
+                        />
                         <MDBox mt={4}>
                           <Grid container spacing={3} alignItems="flex-start">
                             {/* LEFT COLUMN */}
