@@ -222,7 +222,7 @@ const CreateJobPage = () => {
       formData.append("folder", "job_roster");
 
       const response = await axiosInstance.post(
-        "https://apis.thescouts.com.au/api/upload-file", // Use relative path since base URL is already in axiosInstance
+        "/upload-file", // Use relative path since base URL is already in axiosInstance
         formData,
         {
           headers: {
@@ -509,7 +509,7 @@ const CreateJobPage = () => {
               numberOfGuards: job.numberOfGuards,
               state: "Victoria",
               // state: job.marker.state || "",
-              job_instructions: job.job_instructions || "",
+              job_instrcutions: job.job_instructions || "",
             };
 
             console.log(`Posting job ${jobIndex + 1}/${allJobs.length}:`, payload);
