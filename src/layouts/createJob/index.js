@@ -1066,11 +1066,11 @@ const CreateJobPage = () => {
                                   <em>Select Job Type</em>
                                 </MenuItem>
                                 <MenuItem value="Event security">Event Security</MenuItem>
-                                <MenuItem value="Residential security">
-                                  Residential Security
-                                </MenuItem>
+                                <MenuItem value="Static security">Static Security</MenuItem>
                                 <MenuItem value="Corporate security">Corporate Security</MenuItem>
-                                <MenuItem value="Personal bodyguard">Personal Bodyguard</MenuItem>
+                                <MenuItem value="Site Patrol Security">
+                                  Site Patrol Security
+                                </MenuItem>
                                 <MenuItem value="Others">Others</MenuItem>
                               </Select>
                               {touched.type && errors.type && (
@@ -1093,7 +1093,7 @@ const CreateJobPage = () => {
                               helperText={touched.description && errors.description}
                             />
 
-                            <TextField
+                            {/* <TextField
                               fullWidth
                               label="Additional Details"
                               name="additionalDetails"
@@ -1106,7 +1106,7 @@ const CreateJobPage = () => {
                               variant="outlined"
                               error={touched.additionalDetails && Boolean(errors.additionalDetails)}
                               helperText={touched.additionalDetails && errors.additionalDetails}
-                            />
+                            /> */}
                             {/* Add this after the Additional Details TextField */}
                             <MDBox>
                               <MDTypography variant="h6" mb={1}>
@@ -1295,11 +1295,13 @@ const CreateJobPage = () => {
                                     {/* Total Hours */}
                                     <MDTypography variant="h6" color="text">
                                       Total hours:{" "}
-                                      {calculateShiftHours(
-                                        values.startDate,
-                                        values.startTime,
-                                        values.endDate,
-                                        values.endTime
+                                      {(
+                                        calculateShiftHours(
+                                          values.startDate,
+                                          values.startTime,
+                                          values.endDate,
+                                          values.endTime
+                                        ) * values.numberOfGuards
                                       ).toFixed(2)}
                                     </MDTypography>
                                   </MDBox>
@@ -1661,32 +1663,47 @@ const CreateJobPage = () => {
 
                                     <MDBox display="flex" justifyContent="space-between">
                                       <MDTypography variant="body2" color="text">
-                                        Start Date & Time:
+                                        Start & End Duration
                                       </MDTypography>
                                       <MDTypography variant="body2" fontWeight="medium">
                                         {formatDateTime(values.startDate, values.startTime)}
-                                      </MDTypography>
-                                    </MDBox>
-
-                                    <MDBox display="flex" justifyContent="space-between">
-                                      <MDTypography variant="body2" color="text">
-                                        End Date & Time:
                                       </MDTypography>
                                       <MDTypography variant="body2" fontWeight="medium">
                                         {formatDateTime(values.endDate, values.endTime)}
                                       </MDTypography>
                                     </MDBox>
 
+                                    {/* <MDBox display="flex" justifyContent="space-between">
+                                      <MDTypography variant="body2" color="text">
+                                        End Date & Time:
+                                      </MDTypography>
+                                      <MDTypography variant="body2" fontWeight="medium">
+                                        {formatDateTime(values.endDate, values.endTime)}
+                                      </MDTypography>
+                                    </MDBox> */}
                                     <MDBox display="flex" justifyContent="space-between">
                                       <MDTypography variant="body2" color="text">
                                         Location:
                                       </MDTypography>
                                       <MDTypography variant="body2" fontWeight="medium">
-                                        {values.marker?.title || "N/A"} (Radius:{" "}
-                                        {values.searchRadius} miles)
+                                        {(() => {
+                                          const location = values.marker?.title || "N/A";
+                                          if (location === "N/A") return location;
+
+                                          // Split by comma and trim each part
+                                          const parts = location
+                                            .split(",")
+                                            .map((part) => part.trim());
+
+                                          // Remove Plus Code (first part) and any part that contains only digits
+                                          const filtered = parts.filter(
+                                            (part, index) => index !== 0 && !/^\d+$/.test(part)
+                                          );
+
+                                          return filtered.join(", ") || location;
+                                        })()}
                                       </MDTypography>
                                     </MDBox>
-
                                     <MDBox
                                       display="flex"
                                       justifyContent="space-between"
